@@ -30,22 +30,16 @@ We begin with the smallest data sample, 100m2 grid.
 
 ```{r data, include=FALSE}
 # Load data
-cdata <- edit_shp(st_read("../Cities/SP/100m/tryU.shp"))
+cdata <- edit_shp(st_read("../data/100m/final_data_100.shp"))
 # Temperature edit
 cdata$LTM <- log(cdata$T_mean)
-
-#sbdata <- cdata[!is.na(cdata$SBmean),]
 ```
 
 The data set is a 100m² grid over the city of São Paulo. Main variables are
 
 *T_mean* - the mean temperature of the cell
 
-*RM* - Micro climatic region
-
-*prop_veg* - proportion of vegetation
-
-*prop_water* - proportion of water cover
+*SBmean* - the mean scenic beauty of the cell
 
 *BH* - Building mean height
 
@@ -144,7 +138,6 @@ boxplot(SBmean/SBcount ~ finalgroups, data = sbdata,
 ```
 
 ```{r}
-
 pop <- sort(tapply(cdata$pop_d, cdata$finalgroups, mean))
 cdata$finalgroups <- factor(cdata$finalgroups, levels = names(pop))
 boxplot(pop_d ~ finalgroups, data = cdata,
@@ -168,11 +161,16 @@ cdata$SVI_lag <- lag.listw(lw, cdata$SVI)
 cdata$SGVI_lag <- lag.listw(lw, cdata$SGVI)
 cdata$SUVI_lag <- lag.listw(lw, cdata$SUVI)
 ```
+
 # Temperature random forest
 
 what is left is to understand random forests and how to showcase its results. And explore lags for discussion.
 
+
 ```{r}
+#library(parallel)
+#library(doParallel)
+
 data_rf <- data.frame(t = cdata$T_mean,
                       EVI = cdata$EVI_mean,
                       SGVI = cdata$SGVI,
@@ -185,9 +183,12 @@ data_rf <- data.frame(t = cdata$T_mean,
                       coord_x = cdata$centx,
                       coord_y = cdata$centy)
 
+# Set up parallel processing
+#cl <- makeCluster(detectCores() - 1)  # Use one less than the total number of cores
+#registerDoParallel(cl)
 
 # Fit Random Forest model
-rf_model <- randomForest(t ~ ., data = data_rf, importance = TRUE)
+rf_model <- randomForest(t ~ ., data = data_rf, importance = TRUE) #, parallel = TRUE)
 
 # Summarize the model
 print(rf_model)
@@ -216,51 +217,57 @@ plot(pdp_svi_lag)
 plot(pdp_sgvi_lag)
 plot(pdp_suvi_lag)
 
-# Partial Dependence Plot for interaction between SVI and SGVI
-pdp_interaction <- partial(rf_model, pred.var = c("SVI", "SGVI"), plot = TRUE, chull = TRUE)
-plot(pdp_interaction)
-
-# Partial Dependence Plot for interaction between SVI and SUVI_lag
-pdp_interaction2 <- partial(rf_model, pred.var = c("SVI", "SUVI_lag"), plot = TRUE, chull = TRUE)
-plot(pdp_interaction2)
-library(ICEbox)
-
-# ICE plot for SVI
-ice_obj <- ice(rf_model, X = data_rf, y = data_rf$t, predictor = "SVI", ice.type = "both")
-plot(ice_obj, x_quantile = TRUE)
-
-# not run 
-library(parallel)
-library(doParallel)
-
-# Set up parallel processing
-cl <- makeCluster(detectCores() - 1)  # Use one less than the total number of cores
-registerDoParallel(cl)
-
-# PDP for interaction between SVI and SGVI with parallel processing
-pdp_interaction <- partial(rf_model, pred.var = c("SVI", "SGVI"), plot = TRUE, chull = TRUE, parallel = TRUE)
-plot(pdp_interaction)
-
 # Stop the cluster
-stopCluster(cl)
+#stopCluster(cl)
 ```
+
+# Scenic beauty random forest
+
 
 ```{r}
-# Create spatial weights matrices with optimal distances
-nb_SVI <- dnearneigh(st_coordinates(cdata), 0, optimal_distance_SVI)
-listw_SVI <- nb2listw(nb_SVI, style = "W")
-cdata$SVI_lag <- lag.listw(listw_SVI, cdata$SVI)
+sbdata <- cdata[!is.na(cdata$SBmean),]
 
-nb_SGVI <- dnearneigh(st_coordinates(cdata), 0, optimal_distance_SGVI)
-listw_SGVI <- nb2listw(nb_SGVI, style = "W")
-cdata$SGVI_lag <- lag.listw(listw_SGVI, cdata$SGVI)
+data_rf2 <- data.frame(sb = sbdata$SBmean,
+                      EVI = sbdata$EVI_mean,
+                      SGVI = sbdata$SGVI,
+                      SVI = sbdata$SVI,
+                      SUVI = sbdata$SUVI,
+                      EVI_lag = sbdata$EVI_lag,
+                      SVI_lag = sbdata$SVI_lag,
+                      SGVI_lag = sbdata$SGVI_lag,
+                      SUVI_lag = sbdata$SUVI_lag,
+                      coord_x = sbdata$centx,
+                      coord_y = sbdata$centy)
 
-nb_SUVI <- dnearneigh(st_coordinates(cdata), 0, optimal_distance_SUVI)
-listw_SUVI <- nb2listw(nb_SUVI, style = "W")
-cdata$SUVI_lag <- lag.listw(listw_SUVI, cdata$SUVI)
+# Fit Random Forest model
+rf_model2 <- randomForest(sb ~ ., data = data_rf2, importance = TRUE)
 
-# Fit the final model with optimal lags
-final_model <- lm(temperature ~ SVI + SGVI + SUVI + SVI_lag + SGVI_lag + SUVI_lag, data = cdata)
-summary(final_model)
+# Summarize the model
+print(rf_model2)
+importance(rf_model2)
 
+# Partial Dependence Plot for SVI
+pdp_svi2 <- partial(rf_model2, pred.var = "SVI", plot = TRUE)
+pdp_sgvi2 <- partial(rf_model2, pred.var = "SGVI", plot = TRUE)
+pdp_suvi2 <- partial(rf_model2, pred.var = "SUVI", plot = TRUE)
+pdp_evi2 <- partial(rf_model2, pred.var = "EVI", plot = TRUE)
+
+# Partial Dependence Plot for SVI_lag
+pdp_svi_lag2 <- partial(rf_model2, pred.var = "SVI_lag", plot = TRUE)
+pdp_sgvi_lag2 <- partial(rf_model2, pred.var = "SGVI_lag", plot = TRUE)
+pdp_suvi_lag2 <- partial(rf_model2, pred.var = "SUVI_lag", plot = TRUE)
+pdp_evi_lag2 <- partial(rf_model2, pred.var = "EVI_lag", plot = TRUE)
+
+
+# Display plots
+plot(pdp_evi2)
+plot(pdp_sgvi2)
+plot(pdp_suvi2)
+plot(pdp_svi2)
+plot(pdp_evi_lag2)
+plot(pdp_svi_lag2)
+plot(pdp_sgvi_lag2)
+plot(pdp_suvi_lag2)
 ```
+
+

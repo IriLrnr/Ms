@@ -19,7 +19,7 @@ edit_shp <- function (data) {
   clean_data$centy <- st_coordinates(centroids)[, 2]
   
   clean_data$BH[is.na(clean_data$BH)] <- 0
-  clean_data$VH[is.na(clean_data)] <- 0
+  clean_data$VH[is.na(clean_data$VH)] <- 0
   
   clean_data$Cat <- cut(clean_data$EVI_mean, breaks = c(0, 0.16, 0.56, 1), 
                    labels = c("SU", "SH", "SG"), include.lowest = TRUE)
