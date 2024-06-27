@@ -9,10 +9,11 @@ load_or_install_packages <- function(packages) {
 
 packages <- c("ggplot2", "viridis", "sf", "sp", "spdep",
               "PerformanceAnalytics", "gridExtra", "biscale", 
-              "cowplot", "randomForest", "pdp")
+              "cowplot", "randomForest", "pdp", "mgcv", "spaMM",
+              "vegan", "car", "ggtern")
 
 # List of packages to be loaded/installed
-packages2 <- c("raster", "terra", "vegan", "car", "spaMM", "lme4", "effects")
+packages2 <- c("raster", "terra", "lme4", "effects")
 
 packages_notused <- c(
   "lmerTest", "regclass", 

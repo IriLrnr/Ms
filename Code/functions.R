@@ -23,7 +23,7 @@ edit_shp <- function (data) {
 spatial_models <- function(data_df, response, predictors, family=gaussian) {
   # Create a list of formulas based on predictors adding random effects
   formulas <- lapply(predictors, function(x) {
-    as.formula(paste(response, "~", x, "+ (1 | sp_codigo) + Cauchy(1 | centx + centy)"))
+    as.formula(paste(response, "~", x, "+ (1 | sp_codigo) + Matern(1 | centx + centy)"))
   })
   
   # Fit the models using fitme
@@ -254,14 +254,14 @@ plot_top_3 <- function (data, res, path_raster, names, n = 3) {
 }
 
 # GAMM models
-gamm_spatial_models <- function(data_df, response, formulas) {
+gam_spatial_models <- function(data_df, response, formulas) {
   formulas <- lapply(formulas, function(x) {
     as.formula(paste(response, "~", x))
   })
   
   models <- lapply(formulas, function(f) {
     
-    gamm(f, 
+    gam(f, 
          random = list(sp_codigo = ~ 1), 
          data = data_df,
          correlation = corSpatial(form = ~ centx + centy, type = "exponential"),

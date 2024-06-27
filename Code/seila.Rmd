@@ -1,0 +1,818 @@
+---
+title: "IDK what im doing anymore"
+author: "Irina Lerner"
+date: "20/06/24"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: paper
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("functions2.R")
+library(mgcv)
+library(ggtern)
+library(spaMM)
+
+
+
+# customs
+custom_theme <- theme_minimal() +
+                theme(text = element_text(size = 12),
+                      plot.title = element_blank(),
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank())
+```
+
+# Data
+
+```{r data, include=FALSE}
+cdata <- edit_shp(st_read("../data/1km/twoESfinal.shp"))
+sbdata <- cdata[!is.na(cdata$SBmean),]
+
+#cdata$LTM <- log(cdata$T_mean)
+```
+
+The data set is a 1km² grid over the city of São Paulo. Main variables are
+
+*T_mean* - the mean temperature of the cell
+
+*SBmean* - the mean scenic beauty of the cell
+
+*EVI_mean* - Mean EVI for the cell. EVI map is a 30m² grid, there is ~ 9 EVI cells in a 100m² grid
+
+*SUVI* - proportion of areas inside a cell with EVI < 0.15 (urban)
+
+*SVI* - proportion of areas inside a cell with 0.15 < EVI < 0.56 (mixed)
+
+*SGVI* - proportion of areas inside a cell with EVI > 0.56 (green)
+
+# Premisse
+
+Vegetation and ecosystem services are correlated.
+
+```{r}
+# Scatter plot with a linear regression line
+ggplot(cdata, aes(x = EVI_mean, y = DT)) +
+  geom_point() +  # Scatter plot
+  geom_smooth(method = "lm", color = "firebrick", se = TRUE) +  # Linear regression line with confidence interval
+  theme_minimal() +
+  labs(title = "", x = "mean EVI", y = "Climatic relief")
+```
+```{r}
+t_base <- lm(DT ~ EVI_mean, cdata)
+summary(t_base)
+AIC(t_base)
+```
+
+An $R^2$ of 93.47%.
+
+```{r}
+sbdata$SBnorm <- sbdata$SBmean/log(sbdata$SBcount/sum(sbdata$SBcount))
+# Scatter plot with a linear regression line
+ggplot(sbdata, aes(x = EVI_mean, y = SBmean)) +
+  geom_point() +  # Scatter plot
+  geom_smooth(method = "lm", color = "firebrick", se = TRUE) +  # Linear regression line with confidence interval
+  theme_minimal() +
+  labs(title = "", x = "mean EVI", y = "Scenic Beauty")
+```
+This is a messier relationship but it is still there
+
+```{r}
+sb_base <- lm(SBmean ~ EVI_mean, sbdata)
+summary(sb_base)
+AIC(sb_base)
+```
+
+Only 30% of the scenic beauty is accounted for in mean EVI.
+
+# Services and vegetation
+
+Let's see the ternary plot for each service and compare.
+
+```{r}
+ggtern(data = cdata, aes(x = SVI, y = SGVI, z = SUVI, color = DT)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "Temperature")
+
+```
+
+```{r}
+ggtern(data = cdata, aes(x = SVI, y = SGVI, z = SUVI, color = DT*pop_d)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c(direction = -1) +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Temperature provision", x = "SVI", y = "SGVI", z = "SUVI", color = "Temperature")
+```
+
+
+```{r}
+ggtern(data = sbdata, aes(x = SVI, y = SGVI, z = SUVI, color = SBmean)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Scenic Beauty", x = "SVI", y = "SGVI", z = "SUVI", color = "Scenic Beauty")
+```
+
+```{r}
+ggtern(data = sbdata, aes(x = SVI, y = SGVI, z = SUVI, color = SBmean*pop_d)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Scenic Beauty provision", x = "SVI", y = "SGVI", z = "SUVI", color = "Scenic beauty")
+```
+
+
+# Spatial autocorrelation
+
+We can also see a lot of spatial autocorrelation in vegetation structure, temperature and scenic beauty data.
+
+```{r, include=FALSE}
+coords <- st_centroid(cdata)
+nb <- poly2nb(cdata)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+nbSB <- poly2nb(sbdata)
+lwSB <- nb2listw(nbSB, style="W", zero.policy=TRUE)
+```
+
+```{r}
+moran.mc(cdata$EVI_mean, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = EVI_mean), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+moran.mc(cdata$SVI, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = SVI), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+moran.mc(cdata$SGVI, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = SGVI), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+moran.mc(cdata$SUVI, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = SUVI), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+moran.mc(cdata$SEVI, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = SEVI), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+moran.mc(cdata$T_mean, lw, nsim = 999)
+
+ggplot(data = cdata) +
+  geom_sf(aes(fill = T_mean), color = NA) +
+  scale_fill_viridis_c(direction = -1) +
+  custom_theme
+```
+
+```{r}
+moran.mc(sbdata$SBmean, lwSB, nsim = 999)
+
+ggplot(data = sbdata) +
+  geom_sf(aes(fill = SBmean), color = NA) +
+  scale_fill_viridis_c() +
+  custom_theme
+```
+
+```{r}
+ggplot(data = redata) +
+  geom_sf(aes(fill = re), color = NA) +
+  scale_fill_viridis_c(option = "turbo", direction = -1) +
+  custom_theme
+```
+
+# variable correlations
+
+There is high correlations among variables
+
+```{r}
+cor_mat <- as.data.frame(cdata)[c("T_mean", "SBmean", "EVI_mean", "SVI", "SGVI", "SUVI", "SEVI")]
+suppressWarnings(chart.Correlation(cor_mat, histogram=TRUE, pch=16, method = "pearson"))
+```
+
+# Linear models
+
+To account for spatial autocorrelation, we use fitme models, from SpaMM package.
+
+We define models but only with variables that are less correlated than 0.6
+
+```{r}
+pred <- c("1",
+            "SVI",
+            "SGVI",
+            "SUVI",
+            "SEVI",
+            "EVI_mean",
+            "SVI + SGVI",
+            "SVI + SUVI",
+            "SVI + EVI_mean",
+            "SVI * SGVI",
+            "SVI * SUVI",
+            "SVI * SEVI",
+            "SVI * EVI_mean")
+```
+
+We perform model selection by comparing AIC in fitme models
+
+```{r}
+LST <- spatial_models(cdata, "DT", pred)
+AIC_eff_tab(LST, "DT")
+
+summary(LST[["SVI * SEVI"]])
+```
+
+Here is the interaction plot for DT
+ 
+```{r}
+# Generate a grid of values for SVI and SGVI between 0 and 1
+newdata <- expand.grid(SVI = seq(0, 1, length.out = 100),
+                       SGVI = seq(0, 1, length.out = 100),
+                       centx = mean(cdata$centx),
+                       centy = mean(cdata$centy))
+
+
+# Create a data frame with all valid combinations where SVI + SGVI + SUVI = 1
+newdata <- newdata[newdata$SVI + newdata$SGVI <= 1, ]
+newdata$SUVI <- 1 - newdata$SVI - newdata$SGVI
+
+# Calculate SEVI
+newdata$SEVI <- ((newdata$SGVI - newdata$SUVI)+1)/2
+
+# Predict values using the fitted model
+newdata$predicted <- predict(LST[["SVI * SGVI"]], newdata = newdata, type = "response")[,1]
+
+
+# Create the interaction plot
+ggplot(newdata, aes(x = SVI, y = SGVI, z = predicted)) +
+  geom_contour_filled() +
+  labs(title = "Interaction between SVI and SEVI",
+       x = "SVI (Sharing)",
+       y = "SEVI (Sparing)",
+       fill = "Predicted Response") +
+  scale_color_viridis_c(option = "turbo") +
+  theme_minimal()
+
+ggtern(data = newdata, aes(x = SVI, y = SGVI, z = SUVI, color = predicted)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "Temperature")
+```
+
+```{r}
+sbdata$SBnorm <- sbdata$SBmean/log(sbdata$SBcount+1)
+SB <- spatial_models(sbdata, "SBmean", pred)
+AIC_eff_tab(SB, "Scenic Beauty")
+```
+
+```{r}
+# Predict values using the fitted model
+newdata$predicted2 <- predict(SB[["SVI * SEVI"]], newdata = newdata, type = "response")[,1]
+
+
+# Create the interaction plot
+ggplot(newdata, aes(x = SVI, y = SGVI, z = predicted2)) +
+  geom_contour_filled() +
+  labs(title = "Interaction between SVI and SGVI",
+       x = "SVI (Sharing)",
+       y = "SGVI (Sparing)",
+       fill = "Predicted Response") +
+  scale_color_viridis_c(option = "turbo") +
+  theme_minimal()
+
+ ggtern(data = newdata, aes(x = SVI, y = SGVI, z = SUVI, color = predicted2)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "Temperature")
+```
+To finalize this analysis we see what happens keeping one of them fixed and varying the other 2
+
+```{r}
+# Generate a grid of values for SVI and SGVI between 0 and 1
+newdata3 <- expand.grid(SVI = seq(0, 1, length.out = 100),
+                       SGVI = rep(0.5,100),
+                       centx = mean(cdata$centx),
+                       centy = mean(cdata$centy))
+
+# Create a data frame with all valid combinations where SVI + SGVI + SUVI = 1
+newdata3 <- newdata3[newdata$SVI + newdata3$SGVI <= 1, ]
+newdata3$SUVI <- 1 - newdata3$SVI - newdata3$SGVI
+newdata3 <- newdata3[newdata3$SUVI >= 0,]
+
+# Calculate SEVI
+newdata3$SEVI <- ((newdata3$SGVI - newdata3$SUVI)+1)/2
+
+# Predict values using the fitted model
+newdata3$predicted <- predict(LST[["SVI * SGVI"]], newdata = newdata3, type = "response")[,1]
+
+
+# Create the interaction plot
+ggplot(newdata3, aes(x = SVI, y = predicted)) +
+  geom_line(color = "green") +
+  labs(title = "Interaction between SVI and SEVI",
+       x = "SVI (Sharing)",
+       y = "predicted",
+       fill = "Predicted Response") +
+  scale_color_viridis_c(option = "turbo") +
+  theme_minimal()
+```
+```{r}
+# Generate a grid of values for SVI and SGVI between 0 and 1
+newdata4 <- expand.grid(SVI = seq(0, 1, length.out = 100),
+                       SUVI = rep(0.5,100),
+                       centx = mean(cdata$centx),
+                       centy = mean(cdata$centy))
+
+# Create a data frame with all valid combinations where SVI + SGVI + SUVI = 1
+newdata4 <- newdata4[newdata$SVI + newdata4$SUVI <= 1, ]
+newdata4$SGVI <- 1 - newdata4$SVI - newdata4$SUVI
+newdata4 <- newdata4[newdata4$SGVI >= 0,]
+
+# Calculate SEVI
+newdata4$SEVI <- ((newdata4$SGVI - newdata4$SUVI)+1)/2
+
+# Predict values using the fitted model
+newdata4$predicted <- predict(LST[["SVI * SGVI"]], newdata = newdata4, type = "response")[,1]
+
+
+# Create the interaction plot
+ggplot(newdata3, aes(x = SVI, y = predicted)) +
+  geom_line(color = "green") +
+  labs(title = "Interaction between SVI and SEVI",
+       x = "SVI (Sharing)",
+       y = "predicted",
+       fill = "Predicted Response") +
+  scale_color_viridis_c(option = "turbo") +
+  theme_minimal()
+```
+
+
+# Nonlinear models
+To evaluate the effect of structure of vegetation in services, we use Generalized Additive Models (GAMs), for it's proprieties on handling correlated variables and non-linearity well. We will add a covariance structure based on location to account for spatial correlations in data. 
+
+```{r}
+ggplot(cdata) +
+  geom_smooth(aes(x = SVI, y = DT, color = "SVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = SGVI, y = DT, color = "SGVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = EVI_mean, y = DT, color = "EVI_mean"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  labs(title = "Effects of SVI, SGVI, and SUVI on Temperature",
+       x = "Index Value",
+       y = "Temperature",
+       color = "Index") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(sbdata) +
+  geom_smooth(aes(x = SVI, y = SBmean, color = "SVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = SGVI, y = SBmean, color = "SGVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = EVI_mean, y = SBmean, color = "EVI_mean"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  labs(title = "Effects of SVI, SGVI, and SUVI on Temperature",
+       x = "Index Value",
+       y = "Temperature",
+       color = "Index") +
+  theme_minimal()
+```
+
+```{r}
+pred_gam <- c("1",
+              "EVI_mean",
+              "SVI",
+              "SGVI",
+              "SUVI",
+              "SEVI",
+              "SVI + SGVI",
+              "SVI + SUVI",
+              "s(EVI_mean)",
+              "s(SVI)",
+              "s(SGVI)",
+              "s(SUVI)",
+              "s(SEVI)",
+              "s(SVI, SGVI)",
+              "s(SVI, SUVI)",
+              "s(SVI, SEVI)",
+              "s(SVI, EVI_mean)")
+```
+
+```{r}
+LST2 <- gam_spatial_models(cdata, "T_mean", pred_gam)
+AIC_tab_gam(LST2)
+```
+
+```{r}
+gam_T <- gam(T_mean ~ s(SVI, EVI_mean) + s(centx, centy), data = cdata, method = "ML")
+summary(gam_T)
+AIC(gam_T)
+plot(gam_T, all.terms = TRUE)
+
+vis.gam(gam_T, view = c("SVI", "EVI_mean"),
+    theta = 145, n.grid = 50, lwd = 0.4)
+
+cdata$residualsT <- residuals(gam_T)
+moran.mc(cdata$residualsT, lw, nsim = 999)
+```
+
+
+```{r}
+SB2 <- gam_spatial_models(sbdata, "SBmean", pred_gam)
+AIC_tab_gam(SB2)
+```
+
+
+```{r}
+gam_SB <- gam(SBmean ~ s(SVI, EVI_mean) + s(centx, centy), data = sbdata, method = "ML")
+summary(gam_SB)
+AIC(gam_SB)
+plot(gam_SB, all.terms = TRUE)
+
+vis.gam(gam_SB, view = c("SVI", "EVI_mean"),
+    theta = 325, n.grid = 50, lwd = 0.4)
+
+
+sbdata$residualsSB <- residuals(gam_SB)
+moran.mc(sbdata$residualsSB, lwSB, nsim = 999)
+```
+
+
+# Double effect of the SVI
+
+```{r}
+cdata$uneveness = cut(cdata$EVI_mean, breaks = c(0, 0.3, 1), include.lowest = TRUE, labels = c("mostly urban", "mostly green"))
+
+# Create the plot with multiple smooths
+ggplot(cdata, aes(x = SVI, y = DT)) +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs")) +
+  facet_wrap(~ uneveness) +
+  labs(title = "Effect of SVI on DT",
+       x = "SVI (Sharing)",
+       y = "DT (Temperature)") +
+  theme_minimal()
+```
+
+```{r}
+sbdata$uneveness = cut(sbdata$EVI_mean, breaks = c(0, 0.5, 1), include.lowest = TRUE, labels = c("mostly urban", "mostly green"))
+
+# Create the plot with multiple smooths
+ggplot(sbdata, aes(x = SVI, y = SBmean)) +
+  geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs")) +
+  facet_wrap(~ uneveness) +
+  labs(title = "Effect of SVI on SB",
+       x = "SVI (Sharing)",
+       y = "DT (Temperature)") +
+  theme_minimal()
+```
+
+
+# Predictive model - ADD EIGENVECTORS AND MULTIVARIATE TO TALK ABOUT TRADE OFFS
+
+We use a random forest model to account for multicollinearity, and non linearity at the same time. Keeping in mind the importance is not descriptive but a tool to make new predictions. 
+
+```{r}
+library(randomForest)
+
+data_rf <- data.frame(re = cdata$T_mean,
+                      EVI = cdata$EVI_mean,
+                      SGVI = cdata$SGVI,
+                      SVI = cdata$SVI,
+                      SUVI = cdata$SUVI,
+                      SEVI = cdata$SEVI,
+                      coord_x = cdata$centx,
+                      coord_y = cdata$centy)
+
+# Fit Random Forest model
+rf_model <- randomForest(re ~ ., data = data_rf, importance = TRUE)
+
+# Summarize the model
+print(rf_model)
+# Check variable importance
+importance <- importance(rf_model)
+print(importance)
+
+# Plot variable importance
+varImpPlot(rf_model)
+
+# Create a plot for variable importance
+importance_df <- data.frame(
+  Variable = rownames(importance),
+  Importance = importance[,1]
+)
+
+ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  labs(title = 'Variable Importance', x = 'Variables', y = 'Importance') +
+  custom_theme
+```
+
+
+```{r}
+# Partial dependence plot for SVI
+pdp_EVI <- partial(rf_model, pred.var = "EVI", grid.resolution = 50)
+
+# Plot partial dependence for SVI
+autoplot(pdp_EVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on EVI", x = "EVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SVI
+pdp_SVI <- partial(rf_model, pred.var = "SVI", grid.resolution = 50)
+
+# Plot partial dependence for SVI
+autoplot(pdp_SVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on SVI", x = "SVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SGVI
+pdp_SGVI <- partial(rf_model, pred.var = "SGVI", grid.resolution = 50)
+
+# Plot partial dependence for SGVI
+autoplot(pdp_SGVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on SGVI", x = "SGVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SUVI
+pdp_SUVI <- partial(rf_model, pred.var = "SUVI", grid.resolution = 50)
+
+# Plot partial dependence for SUVI
+autoplot(pdp_SUVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on SUVI", x = "SUVI", y = "Partial Dependence")
+```
+
+
+```{r}
+# Partial dependence plot for SEVI
+pdp_SEVI <- partial(rf_model, pred.var = "SEVI", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_SEVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on SEVI", x = "SEVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for x
+pdp_x <- partial(rf_model, pred.var = "coord_x", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_x) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on x", x = "x", y = "Partial Dependence")
+```
+
+
+```{r}
+# Partial dependence plot for x
+pdp_y <- partial(rf_model, pred.var = "coord_y", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_y) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of T_mean on y", x = "y", y = "Partial Dependence")
+```
+
+Now for Scenic beauty
+
+
+```{r}
+library(randomForest)
+
+data_rf <- data.frame(re = sbdata$SBmean,
+                      count = sbdata$SBcount,
+                      EVI = sbdata$EVI_mean,
+                      SGVI = sbdata$SGVI,
+                      SVI = sbata$SVI,
+                      SUVI = sbdata$SUVI,
+                      SEVI = sbdata$SEVI,
+                      coord_x = sbdata$centx,
+                      coord_y = sbdata$centy)
+
+# Fit Random Forest model
+rf_model <- randomForest(re ~ ., data = data_rf, importance = TRUE)
+
+# Summarize the model
+print(rf_model)
+# Check variable importance
+importance <- importance(rf_model)
+print(importance)
+
+# Plot variable importance
+varImpPlot(rf_model)
+
+# Create a plot for variable importance
+importance_df <- data.frame(
+  Variable = rownames(importance),
+  Importance = importance[,1]
+)
+
+ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  labs(title = 'Variable Importance', x = 'Variables', y = 'Importance') +
+  custom_theme
+```
+
+
+```{r}
+# Partial dependence plot for SVI
+pdp_EVI <- partial(rf_model, pred.var = "EVI", grid.resolution = 50)
+
+# Plot partial dependence for SVI
+autoplot(pdp_EVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on EVI", x = "EVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SVI
+pdp_SVI <- partial(rf_model, pred.var = "SVI", grid.resolution = 50)
+
+# Plot partial dependence for SVI
+autoplot(pdp_SVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on SVI", x = "SVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SGVI
+pdp_SGVI <- partial(rf_model, pred.var = "SGVI", grid.resolution = 50)
+
+# Plot partial dependence for SGVI
+autoplot(pdp_SGVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on SGVI", x = "SGVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for SUVI
+pdp_SUVI <- partial(rf_model, pred.var = "SUVI", grid.resolution = 50)
+
+# Plot partial dependence for SUVI
+autoplot(pdp_SUVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on SUVI", x = "SUVI", y = "Partial Dependence")
+```
+
+
+```{r}
+# Partial dependence plot for SEVI
+pdp_SEVI <- partial(rf_model, pred.var = "SEVI", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_SEVI) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on SEVI", x = "SEVI", y = "Partial Dependence")
+```
+
+```{r}
+# Partial dependence plot for x
+pdp_x <- partial(rf_model, pred.var = "coord_x", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_x) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on x", x = "x", y = "Partial Dependence")
+```
+
+
+```{r}
+# Partial dependence plot for x
+pdp_y <- partial(rf_model, pred.var = "coord_y", grid.resolution = 50)
+
+# Plot partial dependence for SEVI
+autoplot(pdp_y) +
+  theme_minimal() +
+  labs(title = "Partial Dependence of SB on y", x = "y", y = "Partial Dependence")
+```
+
+# Multivariate predictive
+setwd("path/to/mvpart")  # Set this to the directory where mvpart is extracted
+"C:/Users/irile/Documents/GitHub/Ms/Code"
+
+
+
+```{r}
+# Load necessary libraries
+library(MultivariateRandomForest)
+library(dplyr)
+library(tidyr)
+
+# Prepare the data
+set.seed(123)  # For reproducibility
+train_indices <- sample(1:nrow(sbdata), size = 0.7 * nrow(sbdata))
+train_data <- as.data.frame(sbdata)[train_indices, ]
+test_data <- as.data.frame(sbdata)[-train_indices, ]
+
+# Define the training and testing datasets
+X_train <- train_data %>% select(SVI, SUVI, SGVI, centx, centy)
+Y_train <- train_data %>% select(DT, SBmean, pop_d)
+X_test <- test_data %>% select(SVI, SUVI, SGVI, centx, centy)
+
+# Convert data frames to matrices
+X_train <- as.matrix(X_train)
+Y_train <- as.matrix(Y_train)
+X_test <- as.matrix(X_test)
+
+# Fit the multivariate Random Forest model
+rf_model <- build_forest_predict(trainX = X_train, trainY = Y_train, n_tree = 10, m_feature = floor(sqrt(ncol(X_train))), min_leaf = 5, testX = X_test)
+
+
+# Prepare the data
+X <- as.data.frame(sbdata) %>% select(SVI, SUVI, SGVI, centx, centy)
+Y <- as.data.frame(sbdata) %>% select(DT, SBmean, pop_d)
+
+# Convert data frames to matrices
+X <- as.matrix(X)
+Y <- as.matrix(Y)
+
+# Fit the multivariate Random Forest model
+
+# Function to compute permutation importance
+permutation_importance <- function(model, X, Y, num_permutations = 100) {
+  original_predictions <- predict_multivariate_forest(model, X)
+  original_performance <- colMeans((Y - original_predictions)^2)
+  importance <- matrix(0, ncol = ncol(X), nrow = ncol(Y))
+  colnames(importance) <- colnames(Y)
+  rownames(importance) <- colnames(X)
+  
+  for (j in 1:ncol(X)) {
+    for (r in 1:ncol(Y)) {
+      performance <- numeric(num_permutations)
+      for (i in 1:num_permutations) {
+        X_permuted <- X
+        X_permuted[, j] <- sample(X_permuted[, j])
+        permuted_predictions <- predict_multivariate_forest(model, X_permuted)
+        performance[i] <- mean((Y[, r] - permuted_predictions[, r])^2)
+      }
+      importance[j, r] <- mean(performance) - original_performance[r]
+    }
+  }
+  importance
+}
+
+# Compute permutation importance for each response variable
+importance <- permutation_importance(rf_model, X, Y)
+importance_df <- as.data.frame(as.table(importance))
+
+# Rename columns for clarity
+colnames(importance_df) <- c("Variable", "Response", "Importance")
+
+# Adjust response names for clarity
+importance_df$Response <- recode(importance_df$Response,
+                                 "DT" = "DT",
+                                 "SBmean" = "SBmean",
+                                 "PopulationDensity" = "PopulationDensity")
+
+# Plot variable importance for all response variables
+plot_importance <- ggplot(importance_df, aes(x = Variable, y = Importance, fill = Response)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Variable Importance for DT, SBmean, and PopulationDensity",
+       x = "Variable",
+       y = "Importance") +
+  theme_minimal() +
+  coord_flip()
+
+# Display the plot
+print(plot_importance)
+
+```
+
+

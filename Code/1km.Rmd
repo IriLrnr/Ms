@@ -1,7 +1,7 @@
 ---
-title: "Effects of urban green infrastructure on supply provision of ecosystem service: Temperature reduction"
+title: "IDK what im doing anymore"
 author: "Irina Lerner"
-date: "30/01/24"
+date: "20/06/24"
 output:
   html_document:
     toc: yes
@@ -22,6 +22,20 @@ custom_theme <- theme_minimal() +
                       panel.grid.major = element_blank(),
                       panel.grid.minor = element_blank())
 ```
+
+# 1 km
+
+```{r data, include=FALSE}
+# Load data
+kmdata <- edit_shp(st_read("../data/1km/twoES.shp"))
+# Temperature edit
+kmdata$LTM <- log(kmdata$T_mean)
+
+install.packages("ggtern")
+
+```
+
+
 
 
 # Data
@@ -60,7 +74,7 @@ The data set is a 100m² grid over the city of São Paulo. Main variables are
 
 # Vegetation
 
-Show São paulo in terms of Sharing and Sparing in the 100m2 grid
+Show São Paulo in terms of Sharing and Sparing in the 100m2 grid
 
 ```{r}
 # Create neighbors list based on a distance threshold
@@ -104,9 +118,62 @@ ggplot(cdata) +
   geom_sf(aes(fill = group), color = NA, size = 0.1) +  # Remove borders with colour = NA
   custom_theme
 ```
+
 ```{r}
 # Create neighbors list based on a distance threshold
 plot_bi_map(cdata, "Cat", "group")
+```
+
+# variable importance for each service
+
+```{r}
+# Define variables and prepare data
+variables <- c("SVI", "SGVI", "SUVI", "EVI_mean")
+cdata[is.na(cdata)] <- 0
+
+# Initialize lists to store results
+results <- list()
+
+# Loop through each group and fit models
+for (group in unique(cdata$group)) {
+  group_data <- as.data.frame(cdata)[cdata$group == group, ]
+  X <- as.matrix(group_data[, variables])
+  Y <- group_data$LTM
+  
+  lasso_model <- cv.glmnet(X, Y, alpha = 1)
+  ridge_model <- cv.glmnet(X, Y, alpha = 0)
+  
+  lasso_coefs <- coef(lasso_model, s = "lambda.min")
+  ridge_coefs <- coef(ridge_model, s = "lambda.min")
+  
+  # Prepare data for plotting
+  variable_names <- rownames(lasso_coefs)[-1]  # Exclude intercept
+  lasso_effect_sizes <- as.vector(lasso_coefs[-1])  # Exclude intercept
+  ridge_effect_sizes <- as.vector(ridge_coefs[-1])  # Exclude intercept
+  
+  # Combine results
+  results[[group]] <- data.frame(
+    Variable = variable_names,
+    Lasso = lasso_effect_sizes,
+    Ridge = ridge_effect_sizes,
+    Group = group
+  )
+}
+
+# Combine all results into one data frame
+effect_sizes_df <- do.call(rbind, results)
+
+# Reshape data for ggplot2
+effect_sizes_long <- gather(effect_sizes_df, key = "Model", value = "EffectSize", -Variable, -Group)
+
+# Create the plot
+ggplot(effect_sizes_long, aes(x = EffectSize, y = Variable, color = Model)) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey") +
+  labs(x = "Effect Size", y = "") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10)) +
+  facet_wrap(~ Group, scales = "free_y")
 ```
 
 # Services
@@ -118,18 +185,18 @@ Finding how much in average each service is affected by category and surrounding
 group_colors <- c("darkgreen", "lightgreen", "greenyellow", "yellow", "gold", "orange", "red", "red3", "red4")
 
 
-
 cdata$finalgroups <- paste(cdata$Cat, cdata$group)
 med <- sort(tapply(cdata$T_mean, cdata$finalgroups, mean))
 cdata$finalgroups <- factor(cdata$finalgroups, levels = names(med))
 boxplot(T_mean ~ finalgroups, data = cdata,
     col = group_colors)
 ```
+
+
 ```{r}
 sbdata <- cdata[!is.na(cdata$SBmean),]
 
 sbdata$finalgroups <- paste(sbdata$Cat, sbdata$group)
-
 
 med <- sort(tapply(sbdata$SBmean/sbdata$SBcount, sbdata$finalgroups, mean))
 sbdata$finalgroups <- factor(sbdata$finalgroups, levels = names(med))
