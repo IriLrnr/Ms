@@ -1,0 +1,308 @@
+---
+title: "Effects of urban green infrastructure on biodiversity: birds (?)"
+author: "Bianca Neves & Irina Lerner"
+date: "19/06/24"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: paper
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#source("functions2.R")
+library(ggplot2)
+library(PerformanceAnalytics) # for correlation matrix
+library(tidyr) # for organized code
+library(sf, sp) # for reading shp and ploting
+library(spdep)
+library(glmnet)
+# customs
+custom_theme <- theme_minimal() +
+                theme(text = element_text(size = 12),
+                      plot.title = element_blank(),
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank())
+```
+
+
+# Data
+
+We begin with a $1km^2$ grid over the urban area of the city of São Paulo
+
+```{r data, include=FALSE}
+# sum of species
+shp <- st_read("../data/1km/richness_effort_v6_total_1km_urb_f1km_30min.shp")
+cdata <- shp
+# Normalize by log 
+cdata$re <- cdata$richness/log(cdata$effort)
+
+AIC(lm(richness ~ 1, cdata))
+AIC(lm(re ~ 1, cdata))
+
+# presence-absence table
+sp <- st_read("../data/1km/ebd_total_v5_1km_urb_f1km_30min.shp")
+# Create a table of unique species and grid IDs
+unique_species <- unique(sp$scntfc_)
+unique_ids <- unique(sp$id)
+
+# Initialize the presence-absence matrix with zeros
+presence_absence <- matrix(0, nrow = length(unique_ids), ncol = length(unique_species))
+colnames(presence_absence) <- unique_species
+rownames(presence_absence) <- unique_ids
+
+# Fill the presence-absence matrix
+for (i in 1:nrow(sp)) {
+  grid_id <- sp$id[i]
+  species <- sp$scntfc_[i]
+  presence_absence[as.character(grid_id), as.character(species)] <- 1
+}
+
+# Convert the matrix to a data frame for better readability
+PA <- as.data.frame(presence_absence)
+```
+
+Let's see it as a ternary plot
+
+```{r}
+library(ggtern)
+library(viridis)
+
+
+ggtern(data = cdata, aes(x = SVI, y = SGVI, z = SUVI, color = re)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  labs(title = "oi", x = "SVI", y = "SGVI", z = "SUVI", color = "Richness")
+
+```
+
+
+We can see that normalizing by re is adequate
+
+```{r}
+AIC(lm(richness ~ 1, cdata))
+AIC(lm(re ~ 1, cdata))
+```
+
+So we proceed with richness normalized by effort.
+
+There is high correlations among variables
+
+```{r}
+cor_mat <- as.data.frame(cdata)[c("richness", "effort", "re", "SVI", "SGVI", "SUVI", "SEVI", "prop_veg", 
+                                  "Bheight_me", "Vheight_me", "Bvol", "Vvol", "Wdistance")]
+suppressWarnings(chart.Correlation(cor_mat, histogram=TRUE, pch=16, method = "spearman"))
+```
+
+Testing for spatial correlation
+
+```{r}
+coords <- st_centroid(cdata)
+nb <- poly2nb(cdata)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+moran.mc(cdata$re, lw, nsim = 999)
+```
+We see that there is spatial correlation
+
+Lets check the spatial distribuition of re
+
+```{r}
+ggplot(data = cdata) +
+  geom_sf(aes(fill = re), color = NA) +
+  scale_fill_viridis_c(direction = -1) +
+  custom_theme
+```
+
+# Linear variable selection
+
+We use lasso and ridge regression, a method that penalizes variables for multicolinearity and selects significant variables.
+
+```{r}
+variables <- c("SVI", "SGVI", "SUVI", "SEVI", "prop_veg", "Bheight_me", "Vheight_me", "Bvol", "Wdistance")
+
+cdata[is.na(cdata)] <- 0
+
+X <- as.matrix(as.data.frame(cdata)[, variables])
+re <- cdata$re
+
+lasso_model <- cv.glmnet(X, re, alpha = 1)
+ridge_model <- cv.glmnet(X, re, alpha = 0)
+
+lasso_coefs <- coef(lasso_model, s = "lambda.min")
+ridge_coefs <- coef(ridge_model, s = "lambda.min")
+
+# Prepare data for plotting
+variable_names <- rownames(lasso_coefs)[-1]  # Exclude intercept
+lasso_effect_sizes <- lasso_coefs[-1, 1]  # Exclude intercept
+ridge_effect_sizes <- ridge_coefs[-1, 1]  # Exclude intercept
+
+# Create a data frame
+effect_sizes_df <- data.frame(
+  Variable = variable_names,
+  Lasso = lasso_effect_sizes,
+  Ridge = ridge_effect_sizes
+)
+
+# Reshape data for ggplot2
+effect_sizes_long <- gather(effect_sizes_df, key = "Model", value = "EffectSize", -Variable)
+
+# Create the plot
+ggplot(effect_sizes_long, aes(x = EffectSize, y = Variable, color = Model)) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey") +
+  labs(x = "Effect Size", y = "") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 10))
+
+```
+With this, we show that SVI and SEVI are a good method for analysing bird diverisity in the 1km range
+
+```{r}
+library(ggeffects)
+full_model <- lm(re ~ SVI + SEVI, data = cdata)
+
+summary(full_model)
+
+
+# Get the summary of the model
+model_summary <- summary(full_model)
+coefficients <- model_summary$coefficients[, "Estimate"]
+standard_errors <- model_summary$coefficients[, "Std. Error"]
+
+# Combine them into a data frame
+effects_df <- data.frame(
+  Variable = names(coefficients),
+  EffectSize = coefficients,
+  StdError = standard_errors
+)
+
+# Create the plot
+ggplot(effects_df[-1,], aes(x = EffectSize, y = Variable)) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0, colour="red", linetype = "dashed") +
+  geom_errorbarh(aes(xmin = EffectSize - StdError, xmax = EffectSize + StdError), height = 0.2) +
+  labs(x = "Effect Size", y = "") +
+  theme_bw()
+```
+
+```{r}
+library(spaMM)
+
+centroids <- st_centroid(cdata)
+cdata$centx <- st_coordinates(centroids)[, 1]
+cdata$centy <- st_coordinates(centroids)[, 2]
+
+ftmod <- fitme(re ~ SVI + SEVI + Matern(1 | centx + centy), data = cdata, method = "ML")
+AIC.HLfit(ftmod)
+```
+We see a small improvement in relation to the linear model without space.
+
+
+```{r}
+library(mgcv)
+
+gammod <- gam(re ~ s(SVI, SEVI), data = cdata, method = "ML")
+summary(gammod)
+AIC(gammod, full_model)
+vis.gam(gammod, view = c("SVI", "SEVI"),
+    theta = 35, n.grid = 50, lwd = 0.4)
+```
+
+This analysis indicates non linearity.
+
+# Random forest
+
+```{r}
+library(randomForest)
+
+data_rf <- data.frame(re = cdata$re,
+                      PV = cdata$prop_veg,
+                      SGVI = cdata$SGVI,
+                      SVI = cdata$SVI,
+                      SUVI = cdata$SUVI,
+                      SEVI = cdata$SEVI,
+                      BV = cdata$Bvol,
+                      VV = cdata$Vvol,
+                      BH = cdata$Bheight_me,
+                      VH = cdata$Vheight_me,
+                      W = cdata$Wdistance,
+                      coord_x = cdata$centx,
+                      coord_y = cdata$centy)
+
+# Fit Random Forest model
+rf_model <- randomForest(re ~ ., data = data_rf, importance = TRUE)
+
+# Summarize the model
+print(rf_model)
+# Check variable importance
+importance <- rf_model$importance
+print(importance)
+
+# Plot variable importance
+varImpPlot(rf_model)
+
+# Create a plot for variable importance
+importance_df <- data.frame(
+  Variable = rownames(importance),
+  Importance = importance[,1]
+)
+
+ggplot(importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  geom_bar(stat = 'identity') +
+  coord_flip() +
+  labs(title = 'Variable Importance', x = 'Variables', y = 'Importance') +
+  custom_theme
+```
+
+```{r}
+library(pdp)
+
+# Partial Dependence Plot for a single feature
+pdp_pv <- partial(rf_model, pred.var = "BV", plot = TRUE, rug = TRUE, train = data_rf)
+print(pdp_pv)
+
+# For multiple features
+pdp_sgvi <- partial(rf_model, pred.var = "PV", plot = TRUE, rug = TRUE, train = data_rf)
+print(pdp_sgvi)
+
+# For multiple features
+pdp_svi <- partial(rf_model, pred.var = "SVI", plot = TRUE, rug = TRUE, train = data_rf)
+print(pdp_svi)
+
+# For multiple features
+pdp_sevi <- partial(rf_model, pred.var = "SEVI", plot = TRUE, rug = TRUE, train = data_rf)
+print(pdp_sevi)
+```
+
+```{r}
+library(vegan)
+
+PAid <- PA
+PAid$id <- as.numeric(rownames(PA))
+
+PA_df <- PAid[order(PAid$id),]
+
+
+env.data <-data.frame(id = cdata$id,
+                      PV = cdata$prop_veg,
+                      SGVI = cdata$SGVI,
+                      SVI = cdata$SVI,
+                      SUVI = cdata$SUVI,
+                      SEVI = cdata$SEVI,
+                      BV = cdata$Bvol,
+                      VV = cdata$Vvol,
+                      BH = cdata$Bheight_me,
+                      VH = cdata$Vheight_me,
+                      W = cdata$Wdistance)
+
+env_data <- env.data[order(env.data$id),]
+
+rda_model <- rda(PA_df ~ ., data = env_data[,-1])
+
+# Plot the RDA results
+plot(rda_model, scaling = 2)
+```

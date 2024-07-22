@@ -1,0 +1,271 @@
+---
+title: "Effects of urban green infrastructure on supply provision of ecosystem service: Temperature reduction"
+author: "Irina Lerner"
+date: "30/01/24"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: paper
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("functions2.R")
+
+# customs
+custom_theme <- theme_minimal() +
+                theme(text = element_text(size = 12),
+                      plot.title = element_blank(),
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank())
+```
+
+# Data
+
+```{r data100, include=FALSE}
+# Load data
+cdata <- edit_shp(st_read("../Cities/SP/100m/tryU.shp"))
+# Temperature edit
+cdata$LTM <- log(cdata$T_mean)
+
+cdata$class[cdata$cd_perimet == 3832] <- "Urban"
+cdata$class[cdata$cd_perimet != 3832] <- "none"
+udata <- cdata[cdata$class == "Urban",]
+#sbdata <- cdata[!is.na(cdata$SBmean),]
+```
+
+
+```{r, echo = FALSE}
+print("Modelo cheio: DT ~ SVI + SEVI + prop_veg")
+full <- lm(DT ~ SVI + SEVI + prop_veg, data_total)
+summary(full)
+AIC(full)
+
+noSVI <- lm(DT ~ SEVI + prop_veg, data_total)
+noSEVI <- lm(DT ~ SVI + prop_veg, data_total)
+
+print("Importance of SVI in full model")
+summary(full)$r.squared - summary(noSVI)$r.squared
+sqrt(mean(noSVI$residuals^2)) - sqrt(mean(full$residuals^2))
+
+print("Importance of SEVI in full model")
+summary(full)$r.squared - summary(noSEVI)$r.squared
+sqrt(mean(noSEVI$residuals^2)) - sqrt(mean(full$residuals^2))
+
+print("VIF for full model")
+VIF(full)
+
+print("Importance of SVI considering only prop_veg")
+summary(noSEVI)$r.squared - summary(lm_base)$r.squared
+sqrt(mean(lm_base$residuals^2)) - sqrt(mean(noSEVI$residuals^2))
+
+full2 <- lm(DT ~ SEVI + SVI, data_total)
+summary(full2)
+noSEVI2 <- lm(DT ~ SVI, data_total)
+noSVI2 <- lm(DT ~ SEVI, data_total)
+
+print("Importance of SVI considering only SVI + SEVI")
+summary(full2)$r.squared - summary(noSVI2)$r.squared
+sqrt(mean(noSVI2$residuals^2)) - sqrt(mean(full2$residuals^2))
+
+print("Importance of SEVI considering only SVI + SEVI")
+summary(full2)$r.squared - summary(noSEVI2)$r.squared
+sqrt(mean(noSEVI2$residuals^2)) - sqrt(mean(full2$residuals^2))
+
+```
+
+# SVI
+
+Vamos olhar então para o valor gráfico de SVI.
+
+```{r SVI_plot, echo = FALSE}
+data_total %>%
+  ggplot(aes(x = SVI, y = DT, color = NULL)) +
+  geom_point(alpha = .7) + 
+  geom_smooth(method = "glm", alpha = .3) +
+  scale_color_viridis_d(begin = .2) +
+  geom_smooth(aes(color = NULL),
+              color = "red", method = "glm", alpha = .3) +
+  theme_bw()
+```
+
+Nesta imagem vemos que SVI tem duas tendências diferentes. Considerando que SVI, junto com SGVI e SUVI é uma proporção de características do espaço, podemos nos perguntar qual é a situação de SGVI e SUVI nos outros locais. SEVI marca a diferença entre ambos, e assim temos que um local que tem mais região urbana do que verde tem $SEVI < 0.5$ e uma região que tem mais verde que urbano tem $SEVI > 0.5$.
+
+```{r SVI_explained, echo = FALSE}
+data_total %>%
+  ggplot(aes(x = SVI, y = DT, color = SEVI)) +
+  geom_point(alpha = .7) + 
+  geom_smooth(method = "glm", alpha = .3) +
+  scale_color_viridis_c(begin = .2) +
+  geom_smooth(aes(color = NULL),
+              color = "red", method = "glm", alpha = .3) +
+  theme_bw()
+```
+
+Classificando o SEVI em maior ou menor que meio, temos
+
+```{r SVI_explained2, echo = FALSE}
+data_total %>%
+  ggplot(aes(x = SVI, y = DT, color = Class)) +
+  geom_point(alpha = .7) + 
+  geom_smooth(method = "glm", alpha = .3) +
+  scale_color_viridis_d(begin = .2) +
+  geom_smooth(aes(color = NULL),
+              color = "red", method = "glm", alpha = .3) +
+  theme_bw()
+```
+
+Aqui podemos observar duas tendências diferentes, dependendo do valor de SEVI, o que confunde a análise linear. 
+
+Em seguida, segmentaremos os dados na região urbana e não urbana, onde o efeito do SVI é oposto.
+
+# Fragmentação da cidade por SEVI.
+
+```{r data_frag}
+data_urban <- data_total[data_total$SEVI < 0.5,]
+data_green <- data_total[data_total$SEVI >= 0.5,]
+```
+
+```{r corrs, echo=FALSE}
+chart.Correlation(data_urban[c(out, predictor_variables)], histogram=TRUE, pch=16, method = "spearman")
+chart.Correlation(data_green[c(out, predictor_variables)], histogram=TRUE, pch=16, method = "spearman")
+```
+
+
+```{r relative_importance_urban, echo = FALSE}
+print("Modelo cheio: DT ~ SVI + SEVI")
+full <- lm(DT ~ SVI + SEVI, data_urban)
+summary(full)
+AIC(full)
+
+noSVI <- lm(DT ~ SEVI, data_urban)
+noSEVI <- lm(DT ~ SVI, data_urban)
+
+print("Importance of SVI in full model")
+summary(full)$r.squared - summary(noSVI)$r.squared
+sqrt(mean(noSVI$residuals^2)) - sqrt(mean(full$residuals^2))
+
+print("Importance of SEVI in full model")
+summary(full)$r.squared - summary(noSEVI)$r.squared
+sqrt(mean(noSEVI$residuals^2)) - sqrt(mean(full$residuals^2))
+```
+
+Agora o SVI parece um pouco mais importante, apesar do valor de R quadrado do modelo ser bem pior. SVI parece ter significancia estatística.
+
+Eu pessoalmente acredito que a diminuição no valor de $R^2$ em relação ao conjunto total de dados se dá porque, na escala mais urbana, a sombra dos prédios tem um efeito que não é possível ignorar.
+
+Uma ideia é tentar entender se a interação entre os dois faz efeito (o efeito esperado de porpoção de vegetação, porque quando os dois aumentam, a propoção absoluta aumenta)
+
+```{r relative_importance_urban2, echo = FALSE}
+print("Modelo cheio: DT ~ SVI * SEVI")
+full <- lm(DT ~ SVI * SEVI, data_urban)
+summary(full)
+AIC(full)
+
+noSVI <- lm(DT ~ SEVI, data_urban)
+noSEVI <- lm(DT ~ SVI, data_urban)
+
+print("Importance of SVI in full model")
+summary(full)$r.squared - summary(noSVI)$r.squared
+sqrt(mean(noSVI$residuals^2)) - sqrt(mean(full$residuals^2))
+
+print("Importance of SEVI in full model")
+summary(full)$r.squared - summary(noSEVI)$r.squared
+sqrt(mean(noSEVI$residuals^2)) - sqrt(mean(full$residuals^2))
+```
+
+Esse modelo parece de fato ser o mais significativo, com efeito positivo das duas variáveis mas negativo da interação?
+
+# Other
+
+```{r}
+data_df <- as.data.frame(cdata)
+#data_df <- as.data.frame(cdata[cdata$surroundings %in% "M"])
+part.lm = varpart(data_df$LTM, data_df[, c("prop_veg")], data_df[, c("PVdif1")], data_df[, c("PVdif2")])
+# Plot with custom settings
+plot(part.lm, digits = 2,
+     bg = c(rgb(48, 225, 210, 80, maxColorValue = 255), 
+            rgb(80, 48, 225, 210, maxColorValue = 255),
+            rgb(210, 80, 48, 225, maxColorValue = 255)))
+
+out1 <- rda(data_df$LTM, data_df[, c("SGVI")], data_df[, c("prop_veg")])
+out2 <- rda(data_df$LTM, data_df[, c("prop_veg")], data_df[, c("SGVI")])
+
+anova(out1, step = 1000, perm.max = 1000)
+anova(out2, step = 1000, perm.max = 1000)
+```
+
+```{r}
+Y <- scale(as.data.frame(cdata)[, "LTM"])  # Response variable, scaled
+X <- scale(as.data.frame(cdata)[, c("EVI_mean", "prop_veg")])
+
+Y <- as.data.frame(Y)
+X <- as.data.frame(X)
+
+pca_result <- prcomp(X, center = TRUE, scale = TRUE)
+
+cdata$PC1 <- pca_result$x[, "PC1"]
+cdata$PC2 <- pca_result$x[, "PC2"]
+
+# Extract loadings
+loadings_df <- as.data.frame(pca_result$rotation)
+loadings_df$Variable <- rownames(pca_result$rotation)
+
+ggplot() +
+  geom_point(data = cdata, aes(x = PC1, y = PC2, color = LTM), size = 3) +
+  geom_segment(data = loadings_df, aes(x = 0, y = 0, xend = PC1 * max(abs(cdata$PC1)), yend = PC2 * max(abs(cdata$PC2))),
+               arrow = arrow(length = unit(0.2, "inches")), color = "black") +
+  geom_text(data = loadings_df, aes(x = PC1 * max(abs(cdata$PC1)), y = PC2 * max(abs(cdata$PC2)), label = Variable), vjust = 1.5, color = "black") +
+  theme_bw() +
+  labs(title = element_blank(), x = "PC1", y = "PC2") +
+  theme(legend.title = element_blank()) +
+  coord_fixed()  # Ensures the plot is square
+```
+
+There is two principal components in this analysis, one related to proportion of vegetation, SGVI and SUVI and another more related to SVI that together compose separate variables.
+
+we need to check if now the linear model looks fancy and good.
+
+```{r}
+rda_result <- rda(Y ~ ., data = as.data.frame(cdata)[,c("EVI_mean", "prop_veg")])
+
+fwd.sel <- ordiR2step(rda(Y ~ 1, data = X), # lower model limit (simple!)
+               scope = formula(rda_result), # upper model limit (the "full" model)
+               direction = "forward",
+               R2scope = TRUE, # can't surpass the "full" model's R2
+               pstep = 1000,
+               trace = FALSE) # change to TRUE to see the selection process!
+
+fwd.sel$call # all vars were kept
+rda_result$CCA$biplot
+RsquareAdj(rda_result)
+
+anova.cca(rda_result, step = 1000, by = "term")
+
+# Type 1 scaling
+ordiplot(rda_result, scaling = 1, type = "text")
+
+cdata$RDA1 <- scores(rda_result, display = "sites")[,1]  # Adding the first RDA axis scores to the spatial data
+cdata$PC1 <- scores(rda_result, display = "sites")[,2]  # Adding the second RDA axis scores to the spatial data
+
+ggplot(cdata) +
+  geom_sf(aes(fill = RDA1), color = NA) +  # Fill grid cells based on RDA1 scores
+  scale_fill_viridis_c() +  # Use a continuous color scale
+  labs(title = "Spatial Distribution of RDA Axis 1 Scores") +
+  theme_minimal()
+
+ggplot(cdata) +
+  geom_sf(aes(fill = PC1), color = NA) +  # Fill grid cells based on RDA1 scores
+  scale_fill_viridis_c() +  # Use a continuous color scale
+  labs(title = "Spatial Distribution of RDA Axis 1 Scores") +
+  theme_minimal()
+
+ggplot() +
+  geom_point(data = as.data.frame(cdata), aes(x = RDA1, y = LTM, color = prop_veg), alpha = 0.5) +
+  scale_color_viridis_c(option = "turbo") +
+  theme_minimal() +
+  labs(title = "RDA Plot with Response and Explanatory Variables", x = "PC1", y = "T")
+```

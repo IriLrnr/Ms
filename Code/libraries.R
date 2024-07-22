@@ -7,20 +7,14 @@ load_or_install_packages <- function(packages) {
   }
 }
 
-packages <- c("ggplot2", "viridis", "sf", "sp", "spdep",
-              "PerformanceAnalytics", "gridExtra", "biscale", 
-              "cowplot", "randomForest", "pdp", "mgcv", "spaMM",
-              "vegan", "car", "ggtern")
-
 # List of packages to be loaded/installed
-packages2 <- c("raster", "terra", "lme4", "effects")
-
-packages_notused <- c(
-  "lmerTest", "regclass", 
-  "data.table", "scales", "visreg", 
-  "spgwr", "rgl", 
-  "Matrix", "regclass", "Rcpp", "RcppEigen",
-  "reshape2"
-)
+packages <- c("sf", "sp", "spdep", # Handling spatial data
+              "dplyr", "tidyr",
+              "PerformanceAnalytics", "randomForest", "pdp",
+              "ggplot2", "gridExtra", "grid", "biscale", "cowplot", "ggtern", "viridis", # plotting
+              "mgcv", "spaMM", "vegan", "car", "mvpart") # statistics
 
 load_or_install_packages(packages)
+
+
+packages2 <- c("raster", "terra", "lme4", "effects", "PerformanceAnalytics", "randomForest", "pdp")

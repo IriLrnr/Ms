@@ -1,0 +1,794 @@
+---
+title: "IK WHAT IM DOING BITCH SAY WAA"
+author: "Irina Lerner"
+date: "27/06/24"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: paper
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("functions.R")
+```
+
+```{r data, include=FALSE}
+# customs theme
+custom_theme <- theme_minimal() +
+                theme(text = element_text(size = 12),
+                      plot.title = element_blank(),
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank())
+
+# data loading 100m
+shp100 <- st_read("../data/100_2_ES.shp")
+data100 <- edit_shp(shp100)
+alldata100 <- data100
+ABdata100 <- alldata100[!is.na(alldata100$AB),]
+CRdata100 <- alldata100[!is.na(alldata100$CR),]
+POPdata100 <- alldata100[!is.na(alldata100$pop),]
+
+# data loading 100m
+shp <- st_read("../data/1km_2_ES.shp")
+data <- edit_shp(shp)
+alldata <- data
+CRdata <- alldata[!is.na(alldata$CR),]
+POPdata <- CRdata[!is.na(CRdata$pop),]
+ABdata <- POPdata[!is.na(POPdata$AB),]
+```
+
+# Scale 
+
+Variogram for climatic relief (100m x 100m scale)
+
+```{r, echo=FALSE}
+library(gstat)
+
+# Create a gstat object for variogram calculation
+g <- gstat(id = "CR", formula = CR ~ 1, data = CRdata100)
+# Calculate the variogram
+variogram_model <- variogram(g)
+# Fit a theoretical variogram model (e.g., exponential)
+fit_variogram <- fit.variogram(variogram_model, model = vgm(psill = 1, model = "Exp", nugget = 0))
+# Plot the variogram
+plot(variogram_model, model = fit_variogram)
+```
+
+Variogram for Aesthetic beauty (100m x 100 scale)
+
+```{r, echo=FALSE}
+# Create a gstat object for variogram calculation
+g <- gstat(id = "AB", formula = AB ~ 1, data = ABdata100)
+# Calculate the variogram
+variogram_model <- variogram(g)
+# Fit a theoretical variogram model (e.g., exponential)
+fit_variogram <- fit.variogram(variogram_model, model = vgm(psill = 1, model = "Exp", nugget = 0))
+# Plot the variogram
+plot(variogram_model, model = fit_variogram)
+```
+```{r, echo=FALSE}
+# Create a gstat object for variogram calculation
+g <- gstat(id = "POP", formula = pop ~ 1, data = POPdata100)
+# Calculate the variogram
+variogram_model <- variogram(g)
+# Fit a theoretical variogram model (e.g., exponential)
+fit_variogram <- fit.variogram(variogram_model, model = vgm(psill = 1, model = "Exp", nugget = 0))
+# Plot the variogram
+plot(variogram_model, model = fit_variogram)
+```
+
+
+```{r, echo=FALSE}
+coords <- cbind(CRdata100$centx, CRdata100$centy)
+xy <- st_centroid(CRdata100)
+
+s.dist1  <-  dnearneigh(xy, 0, 200)  
+s.dist2  <-  dnearneigh(xy, 0, 500)
+s.dist3  <-  dnearneigh(xy, 0, 600)
+s.dist4  <-  dnearneigh(xy, 0, 700)
+s.dist5  <-  dnearneigh(xy, 0, 800)
+
+lw1 <- nb2listw(s.dist1, style="W", zero.policy=T)
+lw2 <- nb2listw(s.dist2, style="W", zero.policy=T) 
+lw3 <- nb2listw(s.dist3, style="W", zero.policy=T) 
+lw4 <- nb2listw(s.dist4, style="W", zero.policy=T) 
+lw5 <- nb2listw(s.dist5, style="W", zero.policy=T) 
+
+scale <- CRdata100
+scale$SVI_lag1 <- lag.listw(lw1, scale$SVI)
+scale$SVI_lag2 <- lag.listw(lw2, scale$SVI)
+scale$SVI_lag3 <- lag.listw(lw3, scale$SVI)
+scale$SVI_lag4 <- lag.listw(lw4, scale$SVI)
+scale$SVI_lag5 <- lag.listw(lw5, scale$SVI)
+
+scale$SGVI_lag1 <- lag.listw(lw1, scale$SGVI)
+scale$SGVI_lag2 <- lag.listw(lw2, scale$SGVI)
+scale$SGVI_lag3 <- lag.listw(lw3, scale$SGVI)
+scale$SGVI_lag4 <- lag.listw(lw4, scale$SGVI)
+scale$SGVI_lag5 <- lag.listw(lw5, scale$SGVI)
+
+mod <- lm(CR ~ SVI + SGVI, scale)
+mod1 <- lm(CR ~ SVI_lag1 + SGVI_lag1, scale)
+mod2 <- lm(CR ~ SVI_lag2 + SGVI_lag2, scale)
+mod3 <- lm(CR ~ SVI_lag3 + SGVI_lag3, scale)
+mod4 <- lm(CR ~ SVI_lag4 + SGVI_lag4, scale)
+mod5 <- lm(CR ~ SVI_lag5 + SGVI_lag5, scale)
+summary(mod)
+
+AIC(mod)
+AIC(mod1)
+AIC(mod2)
+AIC(mod3)
+AIC(mod4)
+AIC(mod5)
+```
+
+# Results
+
+```{r, echo=FALSE}
+print("Proportion of vegetation and population of São Paulo")
+print(sum(alldata$pop, na.rm = TRUE))
+```
+
+## Correlation between variables
+
+```{r, echo=FALSE}
+cor_mat <- as.data.frame(alldata)[c("CR", "AB", "pop", "prop_veg", "SVI", "SGVI", "SUVI")]
+suppressWarnings(chart.Correlation(cor_mat, histogram=TRUE, pch=16, method = "pearson"))
+```
+
+## Spatial Autocorrelation
+
+```{r, echo=FALSE}
+nbCR <- poly2nb(CRdata)
+lwCR <- nb2listw(nbCR, style="W", zero.policy=TRUE)
+
+nbSB <- poly2nb(ABdata)
+lwSB <- nb2listw(nbSB, style="W", zero.policy=TRUE)
+
+nbPOP <- poly2nb(POPdata)
+lwPOP <- nb2listw(nbPOP, style="W", zero.policy=TRUE)
+
+# Run Moran's I tests
+moran_PV <- moran.mc(alldata$prop_veg, lw, nsim = 999)
+moran_SVI <- moran.mc(alldata$SVI, lw, nsim = 999)
+moran_SGVI <- moran.mc(alldata$SGVI, lw, nsim = 999)
+moran_SUVI <- moran.mc(alldata$SUVI, lw, nsim = 999)
+moran_CR <- moran.mc(CRdata$CR, lwCR, nsim = 999)
+moran_AB <- moran.mc(ABdata$AB, lwSB, nsim = 999)
+moran_pop <- moran.mc(POPdata$pop, lwPOP, nsim = 999)
+
+# Create a data frame for the results
+moran_results <- data.frame(
+  Variable = c("PV", "SVI", "SGVI", "SUVI", "CR", "AB", "pop"),
+  Moran_I = c(moran_PV$statistic, moran_SVI$statistic, moran_SGVI$statistic, moran_SUVI$statistic,  moran_CR$statistic, moran_AB$statistic, moran_pop$statistic),
+  P_value = c(moran_PV$p.value, moran_SVI$p.value, moran_SGVI$p.value, moran_SUVI$p.value,  moran_CR$p.value, moran_AB$p.value, moran_pop$p.value))
+
+moran_results
+```
+
+```{r, include = FALSE}
+plot_PV <- plot_map(alldata, "prop_veg", "PV")
+plot_SVI <- plot_map(alldata, "SVI", "SVI")
+plot_SGVI <- plot_map(alldata, "SGVI", "SGVI")
+plot_SUVI <- plot_map(alldata, "SUVI", "SUVI")
+plot_CR <- plot_map(alldata, "CR", "CR")
+plot_AB <- plot_map(alldata, "AB", "AB")
+plot_pop <- plot_map(alldata, "pop", "pop")
+
+legend_grob <- plot_dummy_legend()
+
+# Combine the plots into a 2x2 layout
+combined_plots <- grid.arrange(
+  plot_PV, plot_SVI, plot_SGVI, plot_SUVI, plot_CR, plot_AB, plot_pop,
+  ncol = 7,
+  top = "")
+
+final_plot <- arrangeGrob(
+                    combined_plots,
+                    legend_grob,
+                    ncol = 1,
+                    heights = c(2, 1.3))  # Adjust the relative heights as needed
+```
+
+```{r, echo=FALSE}
+grid.arrange(final_plot)
+```
+
+## Trade-off between Sharing and Sparing
+
+```{r, include=FALSE}
+# Create individual plots without legends
+plot_CR <- ggtern(data = CRdata, aes(x = SVI, y = SGVI, z = SUVI, color = CRn)) +
+  geom_point(size = 2) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_AB <- ggtern(data = ABdata, aes(x = SVI, y = SGVI, z = SUVI, color = ABn)) +
+  geom_point(size = 2) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Aesthetic beauty", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_pop <- ggtern(data = POPdata, aes(x = SVI, y = SGVI, z = SUVI, color = popn)) +
+  geom_point(size = 2) +
+  scale_color_viridis_c() +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Population", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+# Combine the plots into a 2x2 layout
+combined_plots <- grid.arrange(
+  plot_CR, plot_AB, plot_pop,
+  ncol = 3,
+  top = ""
+)
+
+# Combine the plots with the shared legend at the bottom
+final_plot <- arrangeGrob(
+  combined_plots,
+  legend_grob,
+  ncol = 1,
+  heights = c(10, 1.3)  # Adjust the relative heights as needed
+)
+```
+
+```{r, echo=FALSE}
+grid.arrange(final_plot)
+```
+
+## Service supply in $1km^2$
+
+```{r, include=FALSE}
+inter <- expand.grid(SVI = seq(0, 1, length.out = 50),
+                       SGVI = seq(0, 1, length.out = 50))
+inter <- inter[inter$SVI + inter$SGVI <= 1, ]
+inter$SUVI <- 1 - inter$SVI - inter$SGVI
+inter$centx <- mean(alldata$centx)
+inter$centy <- mean(alldata$centy)
+
+fixurban <- expand.grid(SVI = seq(0, 0.9, length.out = 1000))
+fixurban$SUVI <- 0.1
+fixurban$SGVI <- 1 - fixurban$SVI - fixurban$SUVI
+fixurban$centx <- mean(alldata$centx)
+fixurban$centy <- mean(alldata$centy)
+
+
+fixsparing <- expand.grid(SVI = seq(0, 0.9, length.out = 1000))
+fixsparing$SGVI <- 0.1
+fixsparing$SUVI <- 1 - fixsparing$SVI - fixsparing$SGVI
+fixsparing$centx <- mean(alldata$centx)
+fixsparing$centy <- mean(alldata$centy)
+
+fixsharing <- expand.grid(SGVI = seq(0, 0.9, length.out = 1000))
+fixsharing$SVI <- 0.1
+fixsharing$SUVI <- 1 - fixsharing$SVI - fixsharing$SGVI
+fixsharing$centx <- mean(alldata$centx)
+fixsharing$centy <- mean(alldata$centy)
+```
+
+### Linear models
+
+We define models but only with variables that are less correlated than 0.6
+
+```{r, include=FALSE}
+pred <- c("1",
+          "SVI",
+          "SGVI",
+          "SUVI",
+          "SVI + SGVI",
+          "SVI + SUVI",
+          "SVI * SGVI",
+          "SVI * SUVI",
+          "prop_veg")
+
+```
+
+We perform model selection by comparing AIC in fitme models
+
+```{r, echo=FALSE}
+CR <- spatial_models(alldata, "CR", pred)
+AIC_eff_tab(CR, "CR")
+```
+
+```{r, echo=FALSE}
+AB <- spatial_models(ABdata, "AB", pred)
+AIC_eff_tab(AB, "AB")
+```
+
+```{r, echo=FALSE}
+POP <- spatial_models(alldata, "pop", pred)
+AIC_eff_tab(POP, "pop")
+```
+
+```{r, include=FALSE}
+# Predict values using the fitted model
+inter$CRpredicted <- predict(CR[["SVI * SGVI"]], newdata = inter, type = "response")[,1]
+inter$ABpredicted <- predict(AB[["SVI * SGVI"]], newdata = inter, type = "response")[,1]
+inter$POPpredicted <- predict(POP[["SVI * SUVI"]], newdata = inter, type = "response")[,1]
+
+# Create individual plots without legends
+plot_CR <- ggtern(data = inter, aes(x = SVI, y = SGVI, z = SUVI, color = CRpredicted)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_AB <- ggtern(data = inter, aes(x = SVI, y = SGVI, z = SUVI, color = ABpredicted)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Aesthetic Beauty", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_pop <- ggtern(data = inter, aes(x = SVI, y = SGVI, z = SUVI, color = POPpredicted)) +
+  geom_point(size = 3) +  # Adjust point size if needed
+  scale_color_viridis_c() +  # Color gradient
+  theme_bw() +  # Use a black and white theme
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  ) +
+  labs(title = "Population", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+# Combine the plots into a 2x2 layout
+combined_plots <- grid.arrange(
+  plot_CR, plot_AB, plot_pop,
+  ncol = 3,
+  top = ""
+)
+
+# Combine the plots with the shared legend at the bottom
+final_plot <- arrangeGrob(
+  combined_plots,
+  legend_grob,
+  ncol = 1,
+  heights = c(10, 1.3)  # Adjust the relative heights as needed
+)
+```
+
+```{r, echo=FALSE}
+grid.arrange(final_plot)
+```
+
+```{r}
+# Predict values using the fitted model
+fixurban$CRpredicted <- predict(CR[["SVI * SGVI"]], newdata = fixurban, type = "response")[,1]
+fixurban$ABpredicted <- predict(AB[["SVI * SGVI"]], newdata = fixurban, type = "response")[,1]
+fixurban$POPpredicted <- predict(POP[["SVI * SUVI"]], newdata = fixurban, type = "response")[,1]
+
+fixsharing$CRpredicted <- predict(CR[["SVI * SGVI"]], newdata = fixsharing, type = "response")[,1]
+fixsharing$ABpredicted <- predict(AB[["SVI * SGVI"]], newdata = fixsharing, type = "response")[,1]
+fixsharing$POPpredicted <- predict(POP[["SVI * SUVI"]], newdata = fixsharing, type = "response")[,1]
+
+fixsparing$CRpredicted <- predict(CR[["SVI * SGVI"]], newdata = fixsparing, type = "response")[,1]
+fixsparing$ABpredicted <- predict(AB[["SVI * SGVI"]], newdata = fixsparing, type = "response")[,1]
+fixsparing$POPpredicted <- predict(POP[["SVI * SUVI"]], newdata = fixsparing, type = "response")[,1]
+
+
+FU <- ggplot(fixurban) +
+          geom_line(aes(x = SVI, y = normalize(CRpredicted), color = "Climatic Relief")) +
+          geom_line(aes(x = SVI, y = normalize(ABpredicted), color = "Aesthetic Beauty")) +
+          geom_line(aes(x = SVI, y = normalize(POPpredicted), color = "Population")) +
+          labs(x = "SVI",
+               y = "Fix Urban 0.1",
+               color = "Model") +
+          scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple", "Population" = "orange")) +
+          theme_bw()
+
+FS <- ggplot(fixsharing) +
+          geom_line(aes(x = SGVI, y = scale(CRpredicted), color = "Climatic Relief")) +
+          geom_line(aes(x = SGVI, y = normalize(ABpredicted), color = "Aesthetic Beauty")) +
+          geom_line(aes(x = SGVI, y = normalize(POPpredicted), color = "Population")) +
+          labs(x = "SGVI",
+               y = "Fix Sharing 0.1",
+               color = "Model") +
+          scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple", "Population" = "orange")) +
+          theme_bw()
+
+FG <- ggplot(fixsparing) +
+          geom_line(aes(x = SVI, y = scale(CRpredicted), color = "Climatic Relief")) +
+          geom_line(aes(x = SVI, y = normalize(ABpredicted), color = "Aesthetic Beauty")) +
+          geom_line(aes(x = SVI, y = normalize(POPpredicted), color = "Population")) +
+          labs(x = "SVI",
+               y = "Fix Green 0.1",
+               color = "Model") +
+          scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple", "Population" = "orange")) +
+          theme_bw()
+
+grid.arrange(
+  FU, FS, FG,
+  nrow = 3,
+  top = ""
+)
+```
+
+### Nonlinear models PROBS WITH COLINEARITY
+
+We define models but only with variables that are less correlated than 0.6
+
+```{r}
+pred_gam <- c("1",
+              "SVI",
+              "SGVI",
+              "SUVI",
+              "prop_veg",
+              "SVI + SGVI",
+              "SVI + SUVI",
+              "s(prop_veg)",
+              "s(SVI)",
+              "s(SGVI)",
+              "s(SUVI)",
+              "s(SVI) + s(SGVI)",
+              "s(SVI) + s(SUVI)",
+              "s(SVI) + s(SGVI) + s(SUVI)",
+              "s(SVI, SGVI)",
+              "s(SVI, SUVI)")
+```
+
+We perform model selection by comparing AIC in fitme models
+
+```{r}
+CR_gam <- gam_spatial_models(alldata, "CR", pred_gam)
+AIC_tab_gam(CR_gam)
+```
+
+```{r}
+AB_gam <- gam_spatial_models(ABdata, "AB", pred_gam)
+AIC_tab_gam(AB_gam)
+```
+
+```{r}
+POP_gam <- gam_spatial_models(alldata, "pop", pred_gam)
+AIC_tab_gam(POP_gam)
+```
+
+```{r}
+gam_CR <- gam(CR ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
+AIC(gam_CR)
+plot(gam_CR, all.terms = TRUE)
+```
+
+```{r}
+gam_AB <- gam(AB ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
+AIC(gam_AB)
+plot(gam_AB, all.terms = TRUE)
+```
+
+```{r}
+gam_POP <- gam(pop ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
+AIC(gam_AB)
+plot(gam_AB, all.terms = TRUE)
+```
+
+### RF
+
+```{r}
+data_rf <- data.frame(CR = ABdata$CR,
+                      AB = ABdata$AB,
+                      POP = ABdata$pop,
+                      prop_veg = ABdata$prop_veg,
+                      SGVI = ABdata$SGVI,
+                      SVI = ABdata$SVI,
+                      SUVI = ABdata$SUVI,
+                      centx = scale(ABdata$centx),
+                      centy = scale(ABdata$centy))
+```
+
+```{r}
+# Fit Random Forest model
+CR_rf <- randomForest(CR ~ SUVI + SGVI + SVI, data = data_rf, importance = TRUE)
+# Plot variable importance
+varImpPlot(CR_rf)
+```
+
+```{r}
+# Fit Random Forest model
+AB_rf <- randomForest(AB ~ SUVI + SGVI + SVI, data = data_rf, importance = TRUE)
+# Plot variable importance
+varImpPlot(AB_rf)
+```
+
+```{r}
+# Fit Random Forest model
+POP_rf <- randomForest(POP ~ SUVI + SGVI + SVI, data = data_rf, importance = TRUE)
+# Plot variable importance
+varImpPlot(POP_rf)
+```
+
+```{r}
+# Predict values using the fitted model
+fixurban$CRpredicted_rf <- predict(CR_rf, newdata = fixurban, type = "response")
+fixurban$ABpredicted_rf <- predict(AB_rf, newdata = fixurban, type = "response")
+fixurban$POPpredicted_rf <- predict(POP_rf, newdata = fixurban, type = "response")
+
+fixsharing$CRpredicted_rf <- predict(CR_rf, newdata = fixsharing, type = "response")
+fixsharing$ABpredicted_rf <- predict(AB_rf, newdata = fixsharing, type = "response")
+fixsharing$POPpredicted_rf <- predict(POP_rf, newdata = fixsharing, type = "response")
+
+fixsparing$CRpredicted_rf <- predict(CR_rf, newdata = fixsparing, type = "response")
+fixsparing$ABpredicted_rf <- predict(AB_rf, newdata = fixsparing, type = "response")
+fixsparing$POPpredicted_rf <- predict(POP_rf, newdata = fixsparing, type = "response")
+
+FU <- ggplot(fixurban) +
+      geom_smooth(aes(x = SVI, y = normalize(CRpredicted_rf)), method = "loess", color = "turquoise") +
+      geom_smooth(aes(x = SVI, y = normalize(ABpredicted_rf)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SVI, y = normalize(POPpredicted_rf)), method = "loess", color = "orange") +
+      labs(title = "Replace sparing green with sharing",
+           x = "SVI",
+           y = "",
+           color = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+
+FS <- ggplot(fixsharing) +
+      geom_smooth(aes(x = SGVI, y = normalize(CRpredicted_rf)), method = "loess", color = "turquoise") +
+      geom_smooth(aes(x = SGVI, y = normalize(ABpredicted_rf)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SGVI, y = normalize(POPpredicted_rf)), method = "loess", color = "orange") +
+      labs(title = "Replace sparing urban with sparing green",
+           x = "SGVI",
+           y = "",
+           color = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+FGr <- ggplot(fixsparing) +
+      geom_smooth(aes(x = SVI, y = normalize(CRpredicted_rf)), method = "loess", color = "turquoise") +
+      geom_smooth(aes(x = SVI, y = normalize(ABpredicted_rf)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SVI, y = normalize(POPpredicted_rf)), method = "loess", color = "orange") +
+      labs(title = "Replace sparing urban with sharing",
+           x = "SVI",
+           y = "",
+           color = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+legend2 <- cowplot::get_plot_component(FG, 'guide-box-right', return_all = TRUE)
+  
+legend_grob2 <- cowplot::ggdraw(legend2)
+
+grid.arrange(
+  FU, FS, FGr, legend_grob2,
+  ncol = 2,
+  nrow = 2,
+  top = ""
+)
+```
+
+### multivariate regression tree
+
+```{r}
+train_data <- as.data.frame(alldata)#[train_indices, ]
+
+# Define the training datasets
+X_train <- train_data %>% select(SVI, SUVI, SGVI, centx, centy)
+#X_train <- train_data %>% select(SVI, SGVI, SUVI)
+Y_train <- train_data %>% select(CRn, ABn, popn)
+
+# Combine the response variables into a matrix
+response <- cbind(SBmean = Y_train$CRn,  Y_train$ABn, Y_train$popn)
+
+mvpart_model <- mvpart(response ~ ., data = X_train,
+                    xv = "1se", # select smallest tree within 1 se
+                    xval = nrow(response), # number of cross-validations
+                    xvmult = 100, # number of multiple cross-validations
+                    size = 6,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+```
+
+```{r}
+# Plot the cross-validated error to find the optimal tree size
+plotcp(mvpart_model)
+```
+
+```{r}
+# Add the leaf nodes to your data
+alldata$LeafNode <- as.factor(as.numeric(predict(mvpart_model, newdata = alldata, type = "where")))
+# Plot the map, coloring by the leaf node
+ggplot(data = alldata) +
+  geom_sf(aes(fill = LeafNode), color = NA) +
+  scale_fill_viridis_d() +  # Use a discrete color scale
+  theme_minimal() +
+  labs(title = "Map Colored by Leaf Nodes", fill = "Leaf Node")
+```
+
+Now we make a boxplot for each node
+
+```{r, echo = F}
+# Colors for each variable
+colors <- c("turquoise", "purple", "orange")
+
+# Unique LeafNodes
+leaf_nodes <- unique(alldata$LeafNode)
+
+# Set up plotting area to display multiple plots
+par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
+
+# Create a boxplot for each LeafNode
+for (node in sort(leaf_nodes)) {
+  subset_data <- alldata[alldata$LeafNode == node, ]
+  
+  boxplot(subset_data$CRn, subset_data$ABn, subset_data$popn,
+              names = c("CR", "AB", "pop"),
+              col = colors)
+}
+```
+
+## Cities
+
+```{r, include = F}
+shp_SP <- st_read("../data/Cities/SP.shp")
+shp_Sing <- st_read("../data/Cities/Sing_2.shp")
+shp_Lond <- st_read("../data/Cities/Lond_2.shp")
+
+data_SP <- add_centroids(shp_SP)
+data_Sing <- add_centroids(shp_Sing)
+data_Lond <- add_centroids(shp_Lond)
+```
+
+```{r, echo=FALSE}
+print("Proportion of vegetation and population of São Paulo")
+print(sum(data_SP$prop_veg * data_SP$area_km2, na.rm = TRUE) / sum(data_SP$area_km2, na.rm = TRUE))
+print(sum(data_SP$pop_km2 * data_SP$area_km2, na.rm = TRUE))
+
+print("Proportion of vegetation and population of Singapore")
+print(sum(data_Sing$prop_veg * data_Sing$area_km2, na.rm = TRUE) / sum(data_Sing$area_km2, na.rm = TRUE))
+print(sum(data_Sing$pop_km2 * data_Sing$area_km2, na.rm = TRUE))
+
+print("Proportion of vegetation and population of London")
+print(sum(data_Lond$prop_veg * data_Lond$area_km2, na.rm = TRUE) / sum(data_Lond$area_km2, na.rm = TRUE))
+print(sum(data_Lond$pop_km2 * data_Lond$area_km2, na.rm = TRUE))
+```
+
+```{r, include=FALSE}
+# Create individual plots without legends
+plot_SP <- ggtern(data = data_SP, aes(x = SVI, y = SGVI, z = SUVI, color = RENDA_PDOM)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c() +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+  labs(title = "São Paulo", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_Sing <- ggtern(data = na.omit(data_Sing), aes(x = SVI, y = SGVI, z = SUVI, color = RENDA_PDOM)) +
+  geom_point(size = 3) +
+  scale_color_viridis_c() +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+  labs(title = "Singapore", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+plot_Lond <- ggtern(data = data_Lond, aes(x = SVI, y = SGVI, z = SUVI, color = RENDA_PDOM)) +
+  geom_point(size = 3, alpha = 0.5) +
+  scale_color_viridis_c() +
+  theme_bw() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 10),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+  labs(title = "London", x = "SVI", y = "SGVI", z = "SUVI", color = "")
+
+# Combine the plots into a 2x2 layout
+combined_plots <- grid.arrange(
+  plot_Sing, plot_SP, plot_Lond,
+  ncol = 3,
+  top = ""
+)
+
+# Combine the plots with the shared legend at the bottom
+final_plot <- arrangeGrob(
+  combined_plots,
+  legend_grob,
+  ncol = 1,
+  heights = c(10, 1.3)  # Adjust the relative heights as needed
+)
+```
+
+```{r, echo=FALSE}
+grid.arrange(final_plot)
+```
+
+We perform model selection by comparing AIC in gam models
+
+```{r}
+INC_SP <- gam_spatial_models(data_SP, "RENDA_PDOM", pred_gam)
+AIC_tab_gam(INC_SP)
+```
+
+```{r}
+INC_SING <- gam_spatial_models(data_Sing, "RENDA_PDOM", pred_gam)
+AIC_tab_gam(INC_SING)
+```
+
+```{r}
+INC_LOND <- gam_spatial_models(data_Lond, "RENDA_PDOM", pred_gam)
+AIC_tab_gam(INC_LOND)
+```
+
+```{r}
+incsp <- gam(RENDA_PDOM ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = data_SP, method = "ML")
+AIC(incsp)
+plot(incsp)
+
+ggplot(data_SP) +
+  geom_smooth(aes(x = SVI, y = RENDA_PDOM, color = "SVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = SGVI, y = RENDA_PDOM, color = "SGVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  geom_smooth(aes(x = SUVI, y = RENDA_PDOM, color = "SUVI"), method = "gam", formula = y ~ s(x, bs = "cs")) +
+  scale_color_manual(values = c("SVI" = "gold", "SGVI" = "forestgreen", "SUVI" = "firebrick")) +
+  labs(title = "Effects of SVI, SGVI, and SUVI on Temperature",
+       x = "Index Value",
+       y = "Income",
+       color = "Index") +
+  theme_minimal()
+```
