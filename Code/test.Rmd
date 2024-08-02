@@ -1,0 +1,1177 @@
+---
+title: "IK WHAT IM DOING BITCH SAY WAA"
+author: "Irina Lerner"
+date: "27/06/24"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    theme: paper
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("functions.R")
+```
+
+```{r data, include=FALSE}
+# customs theme
+custom_theme <- theme_minimal() +
+                theme(text = element_text(size = 12),
+                      plot.title = element_blank(),
+                      panel.grid.major = element_blank(),
+                      panel.grid.minor = element_blank())
+
+# data loading 100m
+shp <- st_read("../data/30_final.shp")
+data <- edit_shp2(shp)
+spatial <- data
+```
+
+# LINEAR
+
+Cross-validation
+
+```{r}
+#cdat <- as.data.frame(data)[,-c(5:42)]
+
+# Define the control for cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train the model using cross-validation
+cr_final <- train(CR ~ EVI_mean * SVIproximal * SGVIproximal * SVIdistal * SGVIdistal, 
+                  data = na.omit(data[,-4]), method = "lm", trControl = train_control)
+
+# Print the results
+print(cr_final)
+
+# Summary of the final model
+summary(cr_final$finalModel)
+```
+
+```{r}
+# Define the control for cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+
+# Train the model using cross-validation
+ab_final <- train(AB ~ EVI_mean * SVIproximal * SGVIproximal * SVIdistal * SGVIdistal, data = as.data.frame(na.omit(data[,-2])), method = "lm", trControl = train_control)
+
+# Print the results
+print(ab_final)
+
+# Summary of the final model
+summary(ab_final$finalModel)
+```
+
+
+
+We then simulate new landscapes to make the image
+
+```{r, include=FALSE}
+green_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+green_local$SVIproximal <- 0
+green_local$SEVIproximal <- 1
+green_local$SVIdistal <- 0
+green_local$SEVIdistal <- 1
+green_local$id <- "GL"
+
+urb_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+urb_local$SVIproximal <- 0
+urb_local$SEVIproximal <- -1
+urb_local$SVIdistal <- 0
+urb_local$SEVIdistal <- -1
+urb_local$id <- "UL"
+
+mixed_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+mixed_local$SVIproximal <- 0.3
+mixed_local$SEVIproximal <- 0
+mixed_local$SVIdistal <- 0.3
+mixed_local$SEVIdistal <- 0
+mixed_local$id <- "ML"
+
+sharing_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+sharing_local$SVIproximal <- 1
+sharing_local$SEVIproximal <- 0
+sharing_local$SVIdistal <- 1
+sharing_local$SEVIdistal <- 0
+sharing_local$id <- "SL"
+
+total <- rbind(urb_local, green_local, mixed_local, sharing_local)
+
+
+green_proximal <- expand.grid(SEVIproximal = seq(-1, 1, by = 0.01),
+                              SVIproximal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq(0.05, 0.95, by = 0.05))
+green_proximal$SVIdistal <- 0
+green_proximal$SEVIdistal <- 1
+green_proximal$id <- "GP"
+
+urb_proximal <- expand.grid(SEVIproximal = seq(-1, 1, by = 0.01),
+                            SVIproximal = seq(0, 1, by = 0.01),
+                            EVI_mean = seq (0.05, 0.95, by = 0.05))
+urb_proximal$SVIdistal <- 0
+urb_proximal$SEVIdistal <- -1
+urb_proximal$id <- "UP"
+
+mixed_proximal <- expand.grid(SEVIproximal = seq(-1, 1, by = 0.01),
+                              SVIproximal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+mixed_proximal$SVIdistal <- 0.3
+mixed_proximal$SEVIdistal <- 0
+mixed_proximal$id <- "MP"
+
+sharing_proximal <- expand.grid(SEVIproximal = seq(-1, 1, by = 0.01),
+                                SVIproximal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+sharing_proximal$SVIdistal <- 1
+sharing_proximal$SEVIdistal <- 0
+sharing_proximal$id <- "SP"
+
+total <- rbind(total, urb_proximal, green_proximal, mixed_proximal, sharing_proximal)
+
+green_distal <- expand.grid(SEVIdistal = seq(-1, 1, by = 0.01),
+                              SVIdistal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+green_distal$EVI_mean <- 1
+green_distal$SVIproximal <- 0
+green_distal$SEVIproximal <- 1
+green_distal$id <- "GD"
+
+urb_distal <- expand.grid(SEVIdistal = seq(-1, 1, by = 0.01),
+                            SVIdistal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+urb_distal$SVIproximal <- 0
+urb_distal$SEVIproximal <- -1
+urb_distal$id <- "UD"
+
+mixed_distal <- expand.grid(SEVIdistal = seq(-1, 1, by = 0.01),
+                              SVIdistal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+mixed_distal$SVIproximal <- 0.3
+mixed_distal$SEVIproximal <- 0
+mixed_distal$id <- "MD"
+
+sharing_distal <- expand.grid(SEVIdistal = seq(-1, 1, by = 0.01),
+                                SVIdistal = seq(0, 1, by = 0.01),
+                              EVI_mean = seq (0.05, 0.95, by = 0.05))
+sharing_distal$SVIproximal <- 1
+sharing_distal$SEVIproximal <- 0
+sharing_distal$id <- "SD"
+
+total <- rbind(total, urb_distal, green_distal, mixed_distal, sharing_distal)
+
+total$SGVIproximal <- (1 + (1 - total$SVIproximal) * total$SEVIproximal - total$SVIproximal)/2
+total$SUVIproximal <- (1 - (1 - total$SVIproximal) * total$SEVIproximal - total$SVIproximal)/2
+total$SGVIdistal <- (1 + (1 - total$SVIdistal) * total$SEVIdistal - total$SVIdistal)/2
+total$SUVIdistal <- (1 - (1 - total$SVIdistal) * total$SEVIdistal - total$SVIdistal)/2
+```
+
+We vary sharing and sparing in different radius to understand the interactions
+
+```{r}
+total$CRpred <- z_scale(predict(cr_final, newdata = total))
+total$ABpred <- z_scale(predict(ab_final, newdata = total))
+```
+
+```{r, echo = F}
+GL1 <- ggplot(total[total$id == "GL",]) +
+          geom_smooth(aes(x = EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "steelblue") +
+          geom_smooth(aes(x = EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "hotpink3") +
+          labs(x = "EVI",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw() +
+          theme(panel.grid.minor = element_blank())+
+          ylim(-1, 1)
+
+UL1 <- ggplot(total[total$id == "UL",]) +
+          geom_smooth(aes(x = EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "steelblue") +
+          geom_smooth(aes(x = EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "hotpink3") +
+          labs(x = "EVI",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw() +
+          theme(panel.grid.minor = element_blank())+
+          ylim(-1, 1)
+
+SL1 <- ggplot(total[total$id == "SL",]) +
+          geom_smooth(aes(x = EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "steelblue") +
+          geom_smooth(aes(x = EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "hotpink3") +
+          labs(x = "EVI",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw() +
+          theme(panel.grid.minor = element_blank())+
+          ylim(-1, 1)
+
+ML1 <- ggplot(total[total$id == "ML",]) +
+          geom_smooth(aes(x = EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "steelblue") +
+          geom_smooth(aes(x = EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "hotpink3") +
+          labs(x = "EVI",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw() +
+          theme(panel.grid.minor = element_blank())+
+          ylim(-1, 1)
+
+TL1 <- ggplot(total) +
+          geom_smooth(aes(x = EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "steelblue") +
+          geom_smooth(aes(x = EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "hotpink3") +
+          labs(x = "EVI",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw() +
+          theme(panel.grid.minor = element_blank())+
+          ylim(-1, 1)
+hb 
+grid.arrange(
+  GL1, UL1, ML1, SL1, TL1,
+  ncol = 5)
+
+```
+
+```{r, echo=FALSE}
+plot_tern(total[total$id == "GP",], "CRpred")
+```
+
+
+```{r, echo = F}
+plot_tern(total[total$id == "MP",], "CRpred")
+```
+
+
+
+
+```{r, echo = F}
+plot_tern(total[total$id == "SP",], "CRpred")
+```
+
+
+
+
+```{r, echo = F}
+plot_tern(total[total$id == "UP",], "CRpred")
+```
+
+```{r, echo = F}
+plot_tern2(total[total$id == "GD",], "CRpred")
+```
+
+
+
+
+```{r, echo = F}
+plot_tern2(total[total$id == "MD",], "CRpred")
+```
+
+
+
+
+```{r, echo = F}
+plot_tern2(total[total$id == "SD",], "CRpred")
+```
+
+```{r, echo = F}
+plot_tern2(total[total$id == "UD",], "CRpred")
+```
+
+```{r, echo = F}
+SD1 <- plot_tern2(total[total$id == "SD",], "CRpred", "mako")
+
+GP2 <- plot_tern(total[total$id == "GP",], "ABpred", "rocket")
+UP2 <- plot_tern(total[total$id == "UP",], "ABpred", "rocket")
+SP2 <- plot_tern(total[total$id == "SP",], "ABpred", "rocket")
+MP2 <- plot_tern(total[total$id == "MP",], "ABpred", "rocket")
+GD2 <- plot_tern2(total[total$id == "GD",], "ABpred", "rocket")
+UD2 <- plot_tern2(total[total$id == "UD",], "ABpred", "rocket")
+SD2 <- plot_tern2(total[total$id == "SD",], "ABpred", "rocket")
+MD2 <- plot_tern2(total[total$id == "MD",], "ABpred", "rocket")
+
+ggsave(filename = paste0(plot_name, ".png"), plot = plots[[plot_name]])
+
+plots <- list(
+  GP1 = GP1, UP1 = UP1, SP1 = SP1, MP1 = MP1,
+  GP2 = GP2, UP2 = UP2, SP2 = SP2, MP2 = MP2,
+  GD1 = GD1, UD1 = UD1, SD1 = SD1, MD1 = MD1,
+  GD2 = GD2, UD2 = UD2, SD2 = SD2, MD2 = MD2
+)
+
+
+ggsave(filename = paste0("../", plot_name, ".png"), plot = plots[[plot_name]])
+
+
+# Save each plot
+for (plot_name in names(plots)) {
+  ggsave(filename = paste0("../", plot_name, ".png"), plot = plots[[plot_name]])
+}
+
+for (plot_name in names(plots)) {
+  ggsave(filename = paste0(plot_name, ".png"), plot = plots[[plot_name]])
+}
+
+GP1 <- plot_tern(total[total$id == "GP",], "CRpred")
+MP1 <- plot_tern(total[total$id == "MP",], "CRpred")
+SP1 <- plot_tern(total[total$id == "SP",], "CRpred")
+UP1 <- plot_tern(total[total$id == "UP",], "CRpred")
+GD1 <- plot_tern(total[total$id == "GD",], "CRpred")
+MD1 <- plot_tern(total[total$id == "MD",], "CRpred")
+SD1 <- plot_tern(total[total$id == "SD",], "CRpred")
+UD1 <- plot_tern(total[total$id == "UD",], "CRpred")
+
+grid.arrange(
+  GP1, MP1, SP1, SP1,
+  GD1, MD1, SD1, SD1,
+  ncol = 4)
+
+
+ggtern() +
+  theme_bw() +  # Removes all grid lines, ticks, axis labels, etc.
+  theme(
+    #tern.panel.grid.major = element_blank(),
+    #tern.panel.grid.minor = element_blank(),
+    #tern.panel.background = element_blank(),
+    tern.axis.text = element_blank(),
+    tern.axis.title = element_blank()
+  ) +
+    labs(x = "SGVI", y = "SVI", z = "SUVI")
+
+```
+
+
+# LOCAL MVPART
+
+```{r, echo=FALSE}
+train_data <- as.data.frame(spatial)#[train_indices, ]
+
+train_data <- train_data %>%
+  mutate(CRn = scale(train_data$CR),
+         ABn = scale(train_data$AB),
+         popn = scale(train_data$pop))
+
+# Define the training datasets
+X_train <- train_data %>% select(EVI_mean, r250_SVI, r500_SVI, r250_SEVI, r500_SEVI)
+#X_train <- train_data %>% select(SVI, SGVI, SUVI)
+Y_train <- train_data %>% select(CRn, ABn, popn)
+
+# Combine the response variables into a matrix
+response <- cbind(SBmean = Y_train$CRn,  Y_train$ABn, Y_train$popn)
+
+mvpart_model <- mvpart(response ~ ., data = X_train,
+                    xv = "none", # select smallest tree within 1 se
+                    #xval = nrow(response), # number of cross-validations
+                    #xvmult = 3, # number of multiple cross-validations
+                    size = 8,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+```
+
+```{r, echo=FALSE}
+# Define the training datasets
+X_train <- train_data %>% select(EVI_mean, SVIproximal, SVIdistal, SEVIproximal, SEVIdistal)
+
+mvpart2_model <- mvpart(response ~ ., data = X_train,
+                    xv = "none", # select smallest tree within 1 se
+                    #xval = nrow(response), # number of cross-validations
+                    #xvmult = 3, # number of multiple cross-validations
+                    size = 8,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+```
+
+
+
+
+```{r, echo = F}
+
+ggplot(total) +
+          geom_smooth(aes(x = -EVI_mean, y = (CRpred)), method = "loess", formula = y ~ x, color = "turquoise") +
+          geom_smooth(aes(x = -EVI_mean, y = (ABpred)), method = "loess", formula = y ~ x, color = "purple") +
+          labs(x = "EVI_mean",
+               y = "service provision",
+               color = "Service") +
+          #scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw()
+
+ggtern(total[total$id == "MD",], aes(x = SGVIdistal, y = SVIdistal, z = SUVIdistal, color = ("CRpred"))) +
+      geom_point(size = 1) +
+      scale_color_viridis_c(option = "turbo", limits = c(-1,1)) +
+      theme_hidelabels() +
+      theme_hideticks() +
+      theme(
+        legend.position = "none",
+      ) +
+      labs(x = "SGVI", y = "SVI", z = "SUVI")
+
+```
+
+```{r, echo = F}
+urb_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+urb_local$SVIproximal <- 0
+urb_local$SEVIproximal <- -1
+urb_local$SVIdistal <- 0
+urb_local$SEVIdistal <- -1
+
+urb_local$CRpred <- predict(cr1, newdata = urb_local)
+urb_local$ABpred <- predict(ab1, newdata = urb_local)
+
+ggplot(urb_local) +
+          geom_smooth(aes(x = -EVI_mean, y = z_scale(CRpred)), method = "loess", formula = y ~ x, color = "turquoise") +
+          geom_smooth(aes(x = -EVI_mean, y = z_scale(ABpred)), method = "loess", formula = y ~ x, color = "purple") +
+          labs(x = "EVI_mean",
+               y = "service provision",
+               color = "Service") +
+          scale_color_manual(values = c("Climatic Relief" = "turquoise", "Aesthetic Beauty" = "purple")) +
+          theme_bw()
+
+
+
+```
+
+```{r, include=FALSE}
+
+green_local <- expand.grid(EVI_mean = seq(0, 1, by = 0.001))
+simulate$SVIproximal <- 0
+simulate$SEVIproximal <- 1
+simulate$SVIdistal <- 0
+simulate$SEVIdistal <- 1
+
+
+
+
+local$SVI1 <- mean(select$SVI1, na.rm = T)
+local$SEVI1 <- mean(select$SEVI1, na.rm = T)
+local$SVI2 <- mean(select$SVI2, na.rm = T)
+local$SEVI2 <- mean(select$SEVI2, na.rm = T)
+local$SVI3 <- mean(select$SVI3, na.rm = T)
+local$SEVI3 <- mean(select$SEVI3, na.rm = T)
+local$SVI4 <- mean(select$SVI4, na.rm = T)
+local$SEVI4 <- mean(select$SEVI4, na.rm = T)
+local$SVI5 <- mean(select$SVI5, na.rm = T)
+local$SEVI5 <- mean(select$SEVI5, na.rm = T)
+local$SUVI <- (1 - (1 - local$SVI) * local$SEVI - local$SVI)/2
+local$SGVI <- 1-local$SVI-local$SUVI
+
+
+
+select <- spatial
+
+local <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       )
+local$SVI1 <- mean(select$SVI1, na.rm = T)
+local$SEVI1 <- mean(select$SEVI1, na.rm = T)
+local$SVI2 <- mean(select$SVI2, na.rm = T)
+local$SEVI2 <- mean(select$SEVI2, na.rm = T)
+local$SVI3 <- mean(select$SVI3, na.rm = T)
+local$SEVI3 <- mean(select$SEVI3, na.rm = T)
+local$SVI4 <- mean(select$SVI4, na.rm = T)
+local$SEVI4 <- mean(select$SEVI4, na.rm = T)
+local$SVI5 <- mean(select$SVI5, na.rm = T)
+local$SEVI5 <- mean(select$SEVI5, na.rm = T)
+local$SUVI <- (1 - (1 - local$SVI) * local$SEVI - local$SVI)/2
+local$SGVI <- 1-local$SVI-local$SUVI
+
+dist1 <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       SEVI = seq(-1, 1, by = 0.01))
+dist1$SVI2 <- mean(select$SVI2, na.rm = T)
+dist1$SEVI2 <- mean(select$SEVI2, na.rm = T)
+dist1$SVI3 <- mean(select$SVI3, na.rm = T)
+dist1$SEVI3 <- mean(select$SEVI3, na.rm = T)
+dist1$SVI4 <- mean(select$SVI4, na.rm = T)
+dist1$SEVI4 <- mean(select$SEVI4, na.rm = T)
+dist1$SVI5 <- mean(select$SVI5, na.rm = T)
+dist1$SEVI5 <- mean(select$SEVI5, na.rm = T)
+dist1$SUVI <- (1 - (1 - dist1$SVI) * dist1$SEVI - dist1$SVI)/2
+dist1$SGVI <- 1-dist1$SVI-dist1$SUVI
+
+dist2 <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       SEVI = seq(-1, 1, by = 0.01))
+dist2$SVI3 <- mean(select$SVI3, na.rm = T)
+dist2$SEVI3 <- mean(select$SEVI3, na.rm = T)
+dist2$SVI4 <- mean(select$SVI4, na.rm = T)
+dist2$SEVI4 <- mean(select$SEVI4, na.rm = T)
+dist2$SVI5 <- mean(select$SVI5, na.rm = T)
+dist2$SEVI5 <- mean(select$SEVI5, na.rm = T)
+dist2$SUVI <- (1 - (1 - dist2$SVI) * dist2$SEVI - dist2$SVI)/2
+dist2$SGVI <- 1-dist2$SVI-dist2$SUVI
+
+dist3 <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       SEVI = seq(-1, 1, by = 0.01))
+dist3$SVI4 <- mean(select$SVI4, na.rm = T)
+dist3$SEVI4 <- mean(select$SEVI4, na.rm = T)
+dist3$SVI5 <- mean(select$SVI5, na.rm = T)
+dist3$SEVI5 <- mean(select$SEVI5, na.rm = T)
+dist3$SUVI <- (1 - (1 - dist3$SVI) * dist3$SEVI - dist3$SVI)/2
+dist3$SGVI <- 1-dist3$SVI-dist3$SUVI
+
+dist4 <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       SEVI = seq(-1, 1, by = 0.01))
+dist4$SVI5 <- mean(select$SVI5, na.rm = T)
+dist4$SEVI5 <- mean(select$SEVI5, na.rm = T)
+dist4$SUVI <- (1 - (1 - dist4$SVI) * dist4$SEVI - dist4$SVI)/2
+dist4$SGVI <- 1-dist4$SVI-dist4$SUVI
+
+dist5 <- expand.grid(SVI = seq(0, 1, by = 0.01),
+                       SEVI = seq(-1, 1, by = 0.01))
+dist5$SUVI <- (1 - (1 - dist5$SVI) * dist5$SEVI - dist5$SVI)/2
+dist5$SGVI <- 1-dist5$SVI-dist5$SUVI
+```
+
+We vary sharing and sparing in different radius to understand the interactions
+
+```{r}
+local$CRpred <- predict(CR, newdata = local)
+local$ABpred <- predict(AB, newdata = local)
+
+CR1 <- lm(CR ~ (SVI+SVI2+SVI3+SVI4+SVI5)*(SEVI+SEVI2+SEVI3+SEVI4+SEVI5), select)
+dist1$CRpred <- predict(CR1, newdata = dist1)
+AB1 <- lm(AB ~ (SVI+SVI2+SVI3+SVI4+SVI5)*(SEVI+SEVI2+SEVI3+SEVI4+SEVI5), select)
+dist1$ABpred <- predict(AB1, newdata = dist1)
+
+CR2 <- lm(CR ~ (SVI+SVI3+SVI4+SVI5)*(SEVI+SEVI3+SEVI4+SEVI5), select)
+dist2$CRpred <- predict(CR2, newdata = dist2)
+AB2 <- lm(AB ~ (SVI+SVI3+SVI4+SVI5)*(SEVI+SEVI3+SEVI4+SEVI5), select)
+dist2$ABpred <- predict(AB2, newdata = dist2)
+
+CR3 <- lm(CR ~ (SVI+SVI4+SVI5)*(SEVI+SEVI4+SEVI5), select)
+dist3$CRpred <- predict(CR3, newdata = dist3)
+AB3 <- lm(AB ~ (SVI+SVI4+SVI5)*(SEVI+SEVI4+SEVI5), select)
+dist3$ABpred <- predict(AB3, newdata = dist3)
+```
+
+
+
+
+```{r, echo = F}
+# Plot for CRpred
+localCR <- plot_tern(local, "CRpred")
+localAB <- plot_tern(local, "ABpred")
+dist1CR <- plot_tern(dist1, "CRpred")
+dist1AB <- plot_tern(dist1, "ABpred")
+dist2CR <- plot_tern(dist2, "CRpred")
+dist2AB <- plot_tern(dist2, "ABpred")
+dist3CR <- plot_tern(dist3, "CRpred")
+dist3AB <- plot_tern(dist3, "ABpred")
+
+grid.arrange(
+  localCR, dist1CR, dist2CR, dist3CR, localAB, dist1AB, dist2AB, dist3AB,
+  ncol = 4) 
+```
+
+
+
+
+```{r, include=FALSE}
+AB <- lm(AB ~ (SVI+SVIr1+SVIr2+SVIr3+SVIr4+SVIr5)*(SEVI+SEVIr1+SEVIr2+SEVIr3+SEVIr4+SEVIr5), spatial)
+summary(AB)
+```
+
+```{r, include=FALSE}
+CR <- lm(CR ~ (SVI+SVIr1+SVIr2+SVIr3+SVIr4+SVIr5)*(SEVI+SEVIr1+SEVIr2+SEVIr3+SEVIr4+SEVIr5), scale)
+summary(CR)
+```
+```{r, include=FALSE}
+AB2 <- lm(AB ~ (SVI+SVIr1+SVIr2+SVIr3+SVIr4+SVIr5)*(SEVI+SEVIr1+SEVIr2+SEVIr3+SEVIr4+SEVIr5), spatial)
+summary(AB2)
+```
+
+Beautiful results! So much to discuss
+
+```{r, include=FALSE}
+select <- spatial
+
+local <- expand.grid(SVI = seq(0, 1, by = 0.001),
+                       SEVI = seq(-1, 1, by = 0.001))
+
+local$SVIr1 <- mean(select$SVIr1, na.rm = T)
+local$SEVIr1 <- mean(select$SEVIr1, na.rm = T)
+local$SVIr2 <- mean(select$SVIr2, na.rm = T)
+local$SEVIr2 <- mean(select$SEVIr2, na.rm = T)
+local$SVIr3 <- mean(select$SVIr3, na.rm = T)
+local$SEVIr3 <- mean(select$SEVIr3, na.rm = T)
+local$SVIr4 <- mean(select$SVIr4, na.rm = T)
+local$SEVIr4 <- mean(select$SEVIr4, na.rm = T)
+local$SVIr5 <- mean(select$SVIr5, na.rm = T)
+local$SEVIr5 <- mean(select$SEVIr5, na.rm = T)
+local$SVI1 <- mean(select$SVI1, na.rm = T)
+local$SEVI1 <- mean(select$SEVI1, na.rm = T)
+local$SVI2 <- mean(select$SVI2, na.rm = T)
+local$SEVI2 <- mean(select$SEVI2, na.rm = T)
+local$SVI3 <- mean(select$SVI3, na.rm = T)
+local$SEVI3 <- mean(select$SEVI3, na.rm = T)
+local$SVI4 <- mean(select$SVI4, na.rm = T)
+local$SEVI4 <- mean(select$SEVI4, na.rm = T)
+local$SVI5 <- mean(select$SVI5, na.rm = T)
+local$SEVI5 <- mean(select$SEVI5, na.rm = T)
+local$SUVI <- (1 - (1 - local$SVI) * local$SEVI - local$SVI)/2
+local$SGVI <- 1-local$SVI-local$SUVI
+
+proximal <- expand.grid(SVI1 = seq(0, 0.99, by = 0.001),
+                       SEVI1 = seq(-1, 1, by = 0.001))
+proximal$SVI <- 0.3
+proximal$SEVI <- 0
+proximal$SVI5 <- 0.3
+proximal$SEVI5 <- 0
+proximal$SGVI1 <- (1 + (1 - proximal$SVI1) * proximal$SEVI1 - proximal$SVI1)/2
+proximal$SUVI1 <- (1 - (1 - proximal$SVI1) * proximal$SEVI1 - proximal$SVI1)/2
+
+distal <- expand.grid(SVI5 = seq(0, 0.99, by = 0.001),
+                       SEVI5 = seq(-1, 1, by = 0.001))
+distal$SVI1 <- 0.3
+distal$SEVI1 <- 0
+distal$SVI <- 0.3
+distal$SEVI <- 0 
+distal$SGVI <- (1 + (1 - distal$SVI5) * distal$SEVI5 - distal$SVI5)/2
+distal$SUVI <- (1 - (1 - distal$SVI5) * distal$SEVI5 - distal$SVI5)/2
+```
+
+
+```{r}
+local$CRpred <- predict(CR, newdata = local)
+local$ABpred <- predict(AB, newdata = local)
+```
+
+```{r}
+localCR <-   ggtern(data = local, aes(x = SVI, y = SGVI, z = SUVI, color = CRpred)) +
+                geom_point(size = 2) +
+                scale_color_viridis_c() +
+                theme_minimal() +
+                theme(
+                  legend.position = "none",
+                  plot.title = element_text(size = 10),
+                  axis.title = element_text(size = 8),
+                  axis.text = element_text(size = 8),
+                  plot.margin = unit(c(1, 1, 1, 1), "lines")
+                ) +
+                labs(title = "Local Climatic relief", x = "SVI", y = "SGVI", z = "SUVI")
+
+localAB <-   ggtern(data = local, aes(x = SVI, y = SGVI, z = SUVI, color = ABpred)) +
+                geom_point(size = 2) +
+                scale_color_viridis_c() +
+                theme_minimal() +
+                theme(
+                  legend.position = "none",
+                  plot.title = element_text(size = 10),
+                  axis.title = element_text(size = 8),
+                  axis.text = element_text(size = 8),
+                  plot.margin = unit(c(1, 1, 1, 1), "lines")
+                ) +
+                labs(title = "Local Climatic relief", x = "SVI", y = "SGVI", z = "SUVI")
+
+grid.arrange(
+  localCR, localAB,
+  ncol = 2)
+```
+
+
+
+
+
+
+## not using
+
+
+```{r, echo=FALSE}
+spatial <- alldata[!is.na(alldata$EVI_mean),]
+
+coords <- cbind(spatial$centx, spatial$centy)
+xy <- st_centroid(spatial)
+
+ring.dist1  <-  dnearneigh(xy, 0, 190)  
+ring.dist2  <-  dnearneigh(xy, 190, 290)
+ring.dist3  <-  dnearneigh(xy, 291, 390)
+ring.dist4  <-  dnearneigh(xy, 391, 490)
+ring.dist5  <-  dnearneigh(xy, 491, 590)
+
+#s.dist1  <-  dnearneigh(xy, 0, 190)  
+#s.dist2  <-  dnearneigh(xy, 0, 290)
+#s.dist3  <-  dnearneigh(xy, 0, 390)
+#s.dist4  <-  dnearneigh(xy, 0, 490)
+#s.dist5  <-  dnearneigh(xy, 0, 590)
+
+spatial$SVI1 <- calculate_surrounding(s.dist1, spatial, "B")
+spatial$SVI2 <- calculate_surrounding(s.dist2, spatial, "B")
+spatial$SVI3 <- calculate_surrounding(s.dist3, spatial, "B")
+spatial$SVI4 <- calculate_surrounding(s.dist4, spatial, "B")
+spatial$SVI5 <- calculate_surrounding(s.dist5, spatial, "B")
+
+spatial$SEVI1 <- calculate_surrounding_dif(s.dist1, spatial)
+spatial$SEVI2 <- calculate_surrounding_dif(s.dist2, spatial)
+spatial$SEVI3 <- calculate_surrounding_dif(s.dist3, spatial)
+spatial$SEVI4 <- calculate_surrounding_dif(s.dist4, spatial)
+spatial$SEVI5 <- calculate_surrounding_dif(s.dist5, spatial)
+
+spatial$SVIr1 <- calculate_surrounding(ring.dist1, spatial, "B")
+spatial$SVIr2 <- calculate_surrounding(ring.dist2, spatial, "B")
+spatial$SVIr3 <- calculate_surrounding(ring.dist3, spatial, "B")
+spatial$SVIr4 <- calculate_surrounding(ring.dist4, spatial, "B")
+spatial$SVIr5 <- calculate_surrounding(ring.dist5, spatial, "B")
+
+spatial$SEVIr1 <- calculate_surrounding_dif(ring.dist1, spatial)
+spatial$SEVIr2 <- calculate_surrounding_dif(ring.dist2, spatial)
+spatial$SEVIr3 <- calculate_surrounding_dif(ring.dist3, spatial)
+spatial$SEVIr4 <- calculate_surrounding_dif(ring.dist4, spatial)
+spatial$SEVIr5 <- calculate_surrounding_dif(ring.dist5, spatial)
+```
+
+Then, we analyze the effect of the radius linearly or with gam it doesnt matter
+
+```{r, include=FALSE}
+# Base predictors
+svi_vars <- c("SVI", "SVI1", "SVI5")
+sgvi_vars <- c("SEVI", "SEVI1","SEVI5")
+
+# Create an empty list to store the models
+pred <- c("1",
+          "SVI*SEVI",
+          "SVI*SEVI1",
+          "SVI*SEVI5",
+          "SVI1*SEVI",
+          "SVI1*SEVI1",
+          "SVI1*SEVI5",
+          "SVI5*SEVI",
+          "SVI5*SEVI1",
+          "SVI5*SEVI5",
+          "EVI_mean")  
+```
+
+
+```{r, include=FALSE}
+CR <- linear_models(spatial, "CR", pred)
+AIC_tab_gam(CR)
+```
+
+```{r, include=FALSE}
+AB <- linear_models(spatial, "AB", pred)
+AIC_tab_gam(AB)
+```
+
+```{r, include=FALSE}
+POP <- linear_models(test_data, "pop", pred)
+AIC_tab_gam(AB)
+```
+
+
+
+
+```{r}
+# Fit Random Forest model
+#select <- spatial[!is.na(spatial$AB),]
+select <- spatial[!is.na(spatial$CR),]
+select <- select[!is.na(select$SVI),]
+select <- select[!is.na(select$SEVI),]
+select <- select[!is.na(select$SVI1),]
+select <- select[!is.na(select$SVI5),]
+select <- select[!is.na(select$SEVI1),]
+select <- select[!is.na(select$SEVI5),]
+
+CR_rf <- randomForest(CR ~ SVI + SEVI + SVI1 + SEVI1 + SVI5 + SEVI5, data = select, importance = TRUE)
+# Plot variable importance
+varImpPlot(CR_rf)
+```
+
+```{r}
+select2 <- select[!is.na(select$AB),]
+
+AB_rf <- randomForest(AB ~ SVI + SEVI + SVI1 + SEVI1 + SVI5 + SEVI5, data = select2, importance = TRUE)
+# Plot variable importance
+varImpPlot(AB_rf)
+```
+
+
+```{r, include=FALSE}
+local <- expand.grid(SVI = seq(0, 1, by = 0.001),
+                       SEVI = seq(-1, 1, by = 0.001))
+
+local$SVI1 <- mean(select$SVI1)
+local$SEVI1 <- mean(select$SEVI1)
+local$SVI5 <- mean(select$SVI5)
+local$SEVI5 <- mean(select$SVI5)
+local$SGVI <- (1 + (1 - local$SVI) * local$SEVI - local$SVI)/2
+local$SUVI <- (1 - (1 - local$SVI) * local$SEVI - local$SVI)/2
+
+proximal <- expand.grid(SVI1 = seq(0, 0.99, length.out = 1000),
+                       SEVI1 = seq(-1, 1, length.out = 2000))
+proximal$SVI <- 0.3
+proximal$SEVI <- 0
+proximal$SVI5 <- 0.3
+proximal$SEVI5 <- 0
+proximal$SGVI1 <- (1 + (1 - proximal$SVI1) * proximal$SEVI1 - proximal$SVI1)/2
+proximal$SUVI1 <- (1 - (1 - proximal$SVI1) * proximal$SEVI1 - proximal$SVI1)/2
+
+distal <- expand.grid(SVI5 = seq(0, 0.99, length.out = 1000),
+                       SEVI5 = seq(-1, 1, length.out = 2000))
+distal$SVI1 <- 0.3
+distal$SEVI1 <- 0
+distal$SVI <- 0.3
+distal$SEVI <- 0 
+distal$SGVI <- (1 + (1 - distal$SVI5) * distal$SEVI5 - distal$SVI5)/2
+distal$SUVI <- (1 - (1 - distal$SVI5) * distal$SEVI5 - distal$SVI5)/2
+```
+
+
+```{r}
+# Predict values using the fitted model
+#local$CRpred <- predict(CR_rf, newdata = local, type = "response")
+#proximal$CRpred <- predict(CR_rf, newdata = proximal, type = "response")
+#distal$CRpred <- predict(CR_rf, newdata = distal, type = "response")
+
+# Predict values using the fitted model
+local$CRpred <- predict(CR_rf, newdata = local, type = "response")
+proximal$CRpred <- predict(CR_rf, newdata = proximal, type = "response")
+distal$CRpred <- predict(CR_rf, newdata = distal, type = "response")
+
+local$ABpred <- predict(AB_rf, newdata = local, type = "response")
+proximal$ABpred <- predict(AB_rf, newdata = proximal, type = "response")
+distal$ABpred <- predict(AB_rf, newdata = distal, type = "response")
+```
+
+
+
+```{r}
+localCR <-   ggtern(data = local, aes(x = SVI, y = SGVI, z = SUVI, color = CRpred)) +
+                geom_point(size = 2) +
+                scale_color_viridis_c() +
+                theme_minimal() +
+                theme(
+                  legend.position = "none",
+                  plot.title = element_text(size = 10),
+                  axis.title = element_text(size = 8),
+                  axis.text = element_text(size = 8),
+                  plot.margin = unit(c(1, 1, 1, 1), "lines")
+                ) +
+                labs(title = "Local Climatic relief", x = "SVI", y = "SGVI", z = "SUVI")
+
+localAB <-   ggtern(data = local, aes(x = SVI, y = SGVI, z = SUVI, color = ABpred)) +
+                geom_point(size = 2) +
+                scale_color_viridis_c() +
+                theme_minimal() +
+                theme(
+                  legend.position = "none",
+                  plot.title = element_text(size = 10),
+                  axis.title = element_text(size = 8),
+                  axis.text = element_text(size = 8),
+                  plot.margin = unit(c(1, 1, 1, 1), "lines")
+                ) +
+                labs(title = "Local Climatic relief", x = "SVI", y = "SGVI", z = "SUVI")
+
+grid.arrange(
+  localCR, localAB,
+  ncol = 2)
+```
+
+```{r}
+proximalCR <-   ggtern(data = local, aes(x = SVI, y = SGVI, z = SUVI, color = CRpred)) +
+                geom_point(size = 2) +
+                scale_color_viridis_c() +
+                theme_minimal() +
+                theme(
+                  legend.position = "none",
+                  plot.title = element_text(size = 10),
+                  axis.title = element_text(size = 8),
+                  axis.text = element_text(size = 8),
+                  plot.margin = unit(c(1, 1, 1, 1), "lines")
+                ) +
+                labs(title = "Local Climatic relief", x = "SVI", y = "SGVI", z = "SUVI")
+
+
+```
+
+
+```{r}
+ggplot(proximal, aes(x = SVI1, y = SEVI1, color = CRpred)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(title = "Interaction Plot between SVI and SEVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+```
+```{r}
+ggplot(distal, aes(x = SVI5, y = SEVI5, color = CRpred)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(title = "Interaction Plot between SVI and SEVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(local, aes(x = SVI, y = SEVI, color = ABpred)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(title = "Interaction Plot between SVI and SEVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+```
+
+
+```{r}
+ggplot(proximal, aes(x = SVI1, y = SEVI1, color = ABpred)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(title = "Interaction Plot between SVI and SEVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+```
+
+
+```{r}
+ggplot(distal, aes(x = SVI5, y = SEVI5, color = ABpred)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  labs(title = "Interaction Plot between SVI and SEVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+```
+
+
+```{r}
+train_data <- as.data.frame(spatial)
+
+train_data <- train_data %>%
+  mutate(CRn = scale(spatial$CR),
+         ABn = scale(spatial$AB),
+         popn = scale(spatial$pop))
+
+# Define the training datasets
+X_train <- train_data %>% select(SVI, SEVI, SVI1, SEVI1, SVI5, SEVI5)
+#X_train <- train_data %>% select(SVI, SGVI, SUVI)
+Y_train <- train_data %>% select(CRn, ABn, popn)
+
+# Combine the response variables into a matrix
+response <- cbind(SBmean = Y_train$CRn,  Y_train$ABn)#, Y_train$popn)
+
+mvpart_model <- mvpart(response ~ ., data = X_train,
+                    xv = "1se", # select smallest tree within 1 se
+                    xval = nrow(response), # number of cross-validations
+                    xvmult = 5, # number of multiple cross-validations
+                    size = 8,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+```
+
+
+
+```{r, echo=FALSE}
+
+mvpart_full <- mvpart(response ~ ., data = X_train,
+                    xv = "none", # select smallest tree within 1 se
+                    #xval = nrow(response), # number of cross-validations
+                    #xvmult = 100, # number of multiple cross-validations
+                    #size = 6,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+
+```
+
+```{r, include=FALSE}
+local <- expand.grid(SVI = seq(0, 0.99, length.out = 100),
+                       SEVI = seq(-1, 1, length.out = 100))
+local$SVI1 <- 0
+local$SEVI1 <- 1
+local$SVI5 <- 0
+local$SEVI5 <- 1
+
+proximal <- expand.grid(SVI1 = seq(0, 0.99, length.out = 100),
+                       SEVI1 = seq(-1, 1, length.out = 100))
+proximal$SVI <- 0
+proximal$SEVI <- -1
+proximal$SVI5 <- 0
+proximal$SEVI5 <- 1
+
+distal <- expand.grid(SVI5 = seq(0, 0.99, length.out = 100),
+                       SEVI5 = seq(-1, 1, length.out = 100))
+distal$SVI1 <- 0
+distal$SEVI1 <- -1
+distal$SVI <- 0
+distal$SEVI <- -1 
+```
+
+```{r}
+ggplot(distal, aes(x = SVI5, y = SEVI5, color = CRpred)) +
+  geom_point() +
+  scale_color_gradient(low = "blue", high = "red") +
+  labs(title = "Interaction Plot between SVI and SGVI",
+       x = "SVI",
+       y = "SEVI",
+       color = "CR") +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Predict values using the fitted model
+local$CRpred <- predict(mvpart_full, newdata = local, type = "vector")
+local$ABpred <- predict(mvpart_full, newdata = local, type = "vector")
+
+proximal$CRpred <- predict(mvpart_full, newdata = proximal, type = "vector")
+proximal$ABpred <- predict(mvpart_full, newdata = proximal, type = "vector")
+
+distal$CRpred <- predict(mvpart_full, newdata = distal, type = "vector")
+distal$ABpred <- predict(mvpart_full, newdata = distal, type = "vector")
+
+
+FU <- ggplot(local[local$SEVI == -1,]) +
+      geom_smooth(aes(x = SVI, y = scale(ABpred)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SVI, y = scale(CRpred)), method = "loess", color = "turquoise") +
+      labs(title = "Replace sparing green with sharing",
+           x = "SVI",
+           y = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+
+FU
+
+FU2 <- ggplot(local) +
+      geom_smooth(aes(x = SEVI, y = ABpred), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SEVI, y = CRpred), method = "loess", color = "turquoise") +
+      labs(title = "Replace sparing green with urban",
+           x = "SEVI",
+           y = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+FU2
+
+FS <- ggplot(loccal) +
+      geom_smooth(aes(x = SGVI, y = normalize(CRpredicted_rf)), method = "loess", color = "turquoise") +
+      geom_smooth(aes(x = SGVI, y = normalize(ABpredicted_rf)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SGVI, y = normalize(POPpredicted_rf)), method = "loess", color = "orange") +
+      labs(title = "Replace sparing urban with sparing green",
+           x = "SGVI",
+           y = "",
+           color = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+FGr <- ggplot(fixsparing) +
+      geom_smooth(aes(x = SVI, y = normalize(CRpredicted_rf)), method = "loess", color = "turquoise") +
+      geom_smooth(aes(x = SVI, y = normalize(ABpredicted_rf)), method = "loess", color = "purple") +
+      geom_smooth(aes(x = SVI, y = normalize(POPpredicted_rf)), method = "loess", color = "orange") +
+      labs(title = "Replace sparing urban with sharing",
+           x = "SVI",
+           y = "",
+           color = "") +
+      theme_bw() +
+      theme(
+        plot.title = element_text(size = 10),
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 8),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+legend2 <- cowplot::get_plot_component(FG, 'guide-box-right', return_all = TRUE)
+  
+legend_grob2 <- cowplot::ggdraw(legend2)
+
+grid.arrange(
+  FU, FS, FGr, legend_grob2,
+  ncol = 2,
+  nrow = 2,
+  top = ""
+)
+```
+
+
+
+```{r, echo=FALSE}
+EVIdata <- alldata[!is.na(alldata$EVI_mean),]
+
+coords <- cbind(EVIdata$centx, EVIdata$centy)
+xy <- st_centroid(EVIdata)
+
+#s.dist1  <-  dnearneigh(xy, 0, 190)  
+#s.dist2  <-  dnearneigh(xy, 190, 290)
+#s.dist3  <-  dnearneigh(xy, 291, 390)
+#s.dist4  <-  dnearneigh(xy, 391, 490)
+#s.dist5  <-  dnearneigh(xy, 491, 590)
+
+s.dist1  <-  dnearneigh(xy, 0, 190)  
+s.dist2  <-  dnearneigh(xy, 0, 290)
+s.dist3  <-  dnearneigh(xy, 0, 390)
+s.dist4  <-  dnearneigh(xy, 0, 490)
+s.dist5  <-  dnearneigh(xy, 0, 590)
+
+lw1 <- nb2listw(s.dist1, style="W", zero.policy=T)
+lw2 <- nb2listw(s.dist2, style="W", zero.policy=T) 
+lw3 <- nb2listw(s.dist3, style="W", zero.policy=T) 
+lw4 <- nb2listw(s.dist4, style="W", zero.policy=T) 
+lw5 <- nb2listw(s.dist5, style="W", zero.policy=T) 
+
+EVIdata$EVIm1 <- lag.listw(lw1, EVIdata$EVI_mean)
+EVIdata$EVIm2 <- lag.listw(lw2, EVIdata$EVI_mean)
+EVIdata$EVIm3 <- lag.listw(lw3, EVIdata$EVI_mean)
+EVIdata$EVIm4 <- lag.listw(lw4, EVIdata$EVI_mean)
+EVIdata$EVIm5 <- lag.listw(lw5, EVIdata$EVI_mean)
+```
+
+now we classify by mean EVI surrounding
+
+```{r}
+train_data <- as.data.frame(EVIdata)
+
+train_data <- train_data %>%
+  mutate(CRn = scale(EVIdata$CR),
+         ABn = scale(EVIdata$AB),
+         popn = scale(EVIdata$pop))
+
+# Define the training datasets
+X_train <- train_data %>% select(EVI_mean, EVIm1, EVIm2, EVIm3, EVIm4, EVIm5)
+#X_train <- train_data %>% select(SVI, SGVI, SUVI)
+Y_train <- train_data %>% select(CRn, ABn, popn)
+
+# Combine the response variables into a matrix
+response <- cbind(SBmean = Y_train$CRn,  Y_train$ABn, Y_train$popn)
+
+mvpart_model <- mvpart(response ~ ., data = X_train,
+                    xv = "none", # select smallest tree within 1 se
+                    #xval = nrow(response), # number of cross-validations
+                    #xvmult = 100, # number of multiple cross-validations
+                    size = 8,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+```
+
+

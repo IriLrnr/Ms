@@ -28,6 +28,9 @@ custom_theme <- theme_minimal() +
 shp100 <- st_read("../data/100_2_ES.shp")
 data100 <- edit_shp(shp100)
 alldata100 <- data100
+subsamples <- alldata[alldata$SEVI < 0.9,]
+
+
 ABdata100 <- alldata100[!is.na(alldata100$AB),]
 CRdata100 <- alldata100[!is.na(alldata100$CR),]
 POPdata100 <- alldata100[!is.na(alldata100$pop),]
@@ -36,6 +39,12 @@ POPdata100 <- alldata100[!is.na(alldata100$pop),]
 shp <- st_read("../data/1km_2_ES.shp")
 data <- edit_shp(shp)
 alldata <- data
+subsamples <- alldata[alldata$SEVI < 0.95,]
+
+plot_map(subsamples, "prop_veg", "prop_veg")
+plot(CR ~ SVI, subsamples)
+plot(CR ~ SGVI, subsamples)
+
 CRdata <- alldata[!is.na(alldata$CR),]
 POPdata <- CRdata[!is.na(CRdata$pop),]
 ABdata <- POPdata[!is.na(POPdata$AB),]
@@ -86,7 +95,7 @@ plot(variogram_model, model = fit_variogram)
 coords <- cbind(CRdata100$centx, CRdata100$centy)
 xy <- st_centroid(CRdata100)
 
-s.dist1  <-  dnearneigh(xy, 0, 200)  
+s.dist1  <-  dnearneigh(xy, 0, 100)  
 s.dist2  <-  dnearneigh(xy, 0, 500)
 s.dist3  <-  dnearneigh(xy, 0, 600)
 s.dist4  <-  dnearneigh(xy, 0, 700)
@@ -125,6 +134,29 @@ AIC(mod2)
 AIC(mod3)
 AIC(mod4)
 AIC(mod5)
+
+calculate_surrounding <- function(nb_list, data, var_name) {
+  data <- as.data.frame(data)
+  index <- sapply(1:length(nb_list), function(i) {
+    neighbors <- nb_list[[i]]
+    sum_var <- sum(data[neighbors, var_name], na.rm = TRUE)
+    sum_all <- sum(data[neighbors, "A"], na.rm = TRUE) +
+               sum(data[neighbors, "B"], na.rm = TRUE) +
+               sum(data[neighbors, "C"], na.rm = TRUE) +
+               sum(data[neighbors, "EVI_nodata"])
+    if (sum_all == 0) {
+      return(NA)
+    } else {
+      return(sum_var / sum_all)
+    }
+  })
+  return(index)
+}
+
+CRdata100$SVI_1km <- calculate_surrounding(s.dist1, CRdata100, "B")
+CRdata100$SUVI_1km <- calculate_surrounding(s.dist1, CRdata100, "A")
+CRdata100$SGVI_1km <- calculate_surrounding(s.dist1, CRdata100, "C")
+
 ```
 
 # Results
@@ -203,7 +235,7 @@ grid.arrange(final_plot)
 
 ```{r, include=FALSE}
 # Create individual plots without legends
-plot_CR <- ggtern(data = CRdata, aes(x = SVI, y = SGVI, z = SUVI, color = CRn)) +
+plot_CR <- ggtern(data = subsamples, aes(x = SVI, y = SGVI, z = SUVI, color = CRn)) +
   geom_point(size = 2) +
   scale_color_viridis_c() +
   theme_minimal() +
@@ -216,7 +248,7 @@ plot_CR <- ggtern(data = CRdata, aes(x = SVI, y = SGVI, z = SUVI, color = CRn)) 
   ) +
   labs(title = "Climatic relief", x = "SVI", y = "SGVI", z = "SUVI", color = "")
 
-plot_AB <- ggtern(data = ABdata, aes(x = SVI, y = SGVI, z = SUVI, color = ABn)) +
+plot_AB <- ggtern(data = subsamples, aes(x = SVI, y = SGVI, z = SUVI, color = ABn)) +
   geom_point(size = 2) +
   scale_color_viridis_c() +
   theme_minimal() +
@@ -229,7 +261,7 @@ plot_AB <- ggtern(data = ABdata, aes(x = SVI, y = SGVI, z = SUVI, color = ABn)) 
   ) +
   labs(title = "Aesthetic beauty", x = "SVI", y = "SGVI", z = "SUVI", color = "")
 
-plot_pop <- ggtern(data = POPdata, aes(x = SVI, y = SGVI, z = SUVI, color = popn)) +
+plot_pop <- ggtern(data = subsamples, aes(x = SVI, y = SGVI, z = SUVI, color = popn)) +
   geom_point(size = 2) +
   scale_color_viridis_c() +
   theme_minimal() +
@@ -444,64 +476,6 @@ grid.arrange(
 )
 ```
 
-### Nonlinear models PROBS WITH COLINEARITY
-
-We define models but only with variables that are less correlated than 0.6
-
-```{r}
-pred_gam <- c("1",
-              "SVI",
-              "SGVI",
-              "SUVI",
-              "prop_veg",
-              "SVI + SGVI",
-              "SVI + SUVI",
-              "s(prop_veg)",
-              "s(SVI)",
-              "s(SGVI)",
-              "s(SUVI)",
-              "s(SVI) + s(SGVI)",
-              "s(SVI) + s(SUVI)",
-              "s(SVI) + s(SGVI) + s(SUVI)",
-              "s(SVI, SGVI)",
-              "s(SVI, SUVI)")
-```
-
-We perform model selection by comparing AIC in fitme models
-
-```{r}
-CR_gam <- gam_spatial_models(alldata, "CR", pred_gam)
-AIC_tab_gam(CR_gam)
-```
-
-```{r}
-AB_gam <- gam_spatial_models(ABdata, "AB", pred_gam)
-AIC_tab_gam(AB_gam)
-```
-
-```{r}
-POP_gam <- gam_spatial_models(alldata, "pop", pred_gam)
-AIC_tab_gam(POP_gam)
-```
-
-```{r}
-gam_CR <- gam(CR ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
-AIC(gam_CR)
-plot(gam_CR, all.terms = TRUE)
-```
-
-```{r}
-gam_AB <- gam(AB ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
-AIC(gam_AB)
-plot(gam_AB, all.terms = TRUE)
-```
-
-```{r}
-gam_POP <- gam(pop ~ s(SVI) + s(SUVI) + s(SGVI) + s(centx, centy), data = alldata, method = "ML")
-AIC(gam_AB)
-plot(gam_AB, all.terms = TRUE)
-```
-
 ### RF
 
 ```{r}
@@ -635,6 +609,8 @@ mvpart_model <- mvpart(response ~ ., data = X_train,
                     size = 6,
                     which = 4,
                     legend = FALSE, margin = 0.01, cp = 0, prn = F)
+
+
 ```
 
 ```{r}
@@ -643,10 +619,42 @@ plotcp(mvpart_model)
 ```
 
 ```{r}
+train_data <- as.data.frame(CRdata100)#[CRdata100$SGVI < 0.7,])#[train_indices, ]
+#train_data <- train_data[train_data$SUVI < 0.7,]
+
+train_data <- train_data %>%
+  mutate(CRn = normalize(train_data$CR),
+         ABn = normalize(train_data$AB),
+         popn = normalize(train_data$pop))
+
+
+# Define the training datasets
+X_train <- train_data %>% select(SVI, SGVI, SUVI, SVI_1km, SGVI_1km)
+#X_train <- train_data %>% select(SVI, SGVI, SUVI)
+Y_train <- train_data %>% select(CRn, ABn, popn)
+
+
+# Combine the response variables into a matrix
+response <- cbind(SBmean = Y_train$CRn,  Y_train$ABn, Y_train$popn)
+
+mvpart_model <- mvpart(response ~ ., data = X_train,
+                    xv = "1se", # select smallest tree within 1 se
+                    xval = nrow(response), # number of cross-validations
+                    xvmult = 1, # number of multiple cross-validations
+                    size = 6,
+                    which = 4,
+                    legend = FALSE, margin = 0.01, cp = 0, prn = F)
+
+
+```
+
+
+
+```{r}
 # Add the leaf nodes to your data
-alldata$LeafNode <- as.factor(as.numeric(predict(mvpart_model, newdata = alldata, type = "where")))
+CRdata100$LeafNode <- as.factor(as.numeric(predict(mvpart_model, newdata = CRdata100, type = "where")))
 # Plot the map, coloring by the leaf node
-ggplot(data = alldata) +
+ggplot(data = CRdata100) +
   geom_sf(aes(fill = LeafNode), color = NA) +
   scale_fill_viridis_d() +  # Use a discrete color scale
   theme_minimal() +
@@ -660,14 +668,14 @@ Now we make a boxplot for each node
 colors <- c("turquoise", "purple", "orange")
 
 # Unique LeafNodes
-leaf_nodes <- unique(alldata$LeafNode)
+leaf_nodes <- unique(CRdata100$LeafNode)
 
 # Set up plotting area to display multiple plots
 par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
 
 # Create a boxplot for each LeafNode
 for (node in sort(leaf_nodes)) {
-  subset_data <- alldata[alldata$LeafNode == node, ]
+  subset_data <- CRdata100[CRdata100$LeafNode == node, ]
   
   boxplot(subset_data$CRn, subset_data$ABn, subset_data$popn,
               names = c("CR", "AB", "pop"),

@@ -12,7 +12,7 @@ packages <- c("sf", "sp", "spdep", # Handling spatial data
               "dplyr", "tidyr",
               "PerformanceAnalytics", "randomForest", "pdp",
               "ggplot2", "gridExtra", "grid", "biscale", "cowplot", "ggtern", "viridis", # plotting
-              "mgcv", "spaMM", "vegan", "car", "mvpart") # statistics
+              "mgcv", "spaMM", "vegan", "car", "mvpart", "caret") # statistics
 
 load_or_install_packages(packages)
 
