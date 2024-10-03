@@ -25,58 +25,9 @@ custom_theme <- theme_minimal() +
                       panel.grid.minor = element_blank())
 
 # data loading 100m
-shp100 <- st_read("../data/100m/final100.shp")
-data100 <- edit_shp(shp100)
-alldata100 <- data100
-ABdata100 <- alldata100[!is.na(alldata100$AB),]
-CRdata100 <- alldata100[!is.na(alldata100$CR),]
-POPdata100 <- alldata100[!is.na(alldata100$pop),]
-
-# data loading 100m
-shp <- st_read("../data/1km/final1km.shp")
-data <- edit_shp(shp)
-alldata <- data
-CRdata <- alldata[!is.na(alldata$CR),]
-POPdata <- CRdata[!is.na(CRdata$pop),]
-ABdata <- POPdata[!is.na(POPdata$AB),]
-```
-
-# Scale 
-
-```{r, echo=FALSE}
-coords <- cbind(alldata100$centx, alldata100$centy)
-xy <- st_centroid(alldata100)
-
-s.dist1  <-  dnearneigh(xy, 0, 100)  
-s.dist2  <-  dnearneigh(xy, 101, 200)
-s.dist3  <-  dnearneigh(xy, 201, 300)
-s.dist4  <-  dnearneigh(xy, 301, 400)
-s.dist5  <-  dnearneigh(xy, 401, 500)
-
-lw1 <- nb2listw(s.dist1, style="W", zero.policy=T)
-lw2 <- nb2listw(s.dist2, style="W", zero.policy=T) 
-lw3 <- nb2listw(s.dist3, style="W", zero.policy=T) 
-lw4 <- nb2listw(s.dist4, style="W", zero.policy=T) 
-lw5 <- nb2listw(s.dist5, style="W", zero.policy=T) 
-
-scale <- alldata100
-scale$SVI1 <- calculate_surrounding(s.dist1, scale, "B")
-scale$SVI2 <- calculate_surrounding(s.dist2, scale, "B")
-scale$SVI3 <- calculate_surrounding(s.dist3, scale, "B")
-scale$SVI4 <- calculate_surrounding(s.dist4, scale, "B")
-scale$SVI5 <- calculate_surrounding(s.dist5, scale, "B")
-
-scale$SGVI1 <- calculate_surrounding(s.dist1, scale, "C")
-scale$SGVI2 <- calculate_surrounding(s.dist2, scale, "C")
-scale$SGVI3 <- calculate_surrounding(s.dist3, scale, "C")
-scale$SGVI4 <- calculate_surrounding(s.dist4, scale, "C")
-scale$SGVI5 <- calculate_surrounding(s.dist5, scale, "C")
-
-scale$SUVI1 <- calculate_surrounding(s.dist1, scale, "A")
-scale$SUVI2 <- calculate_surrounding(s.dist2, scale, "A")
-scale$SUVI3 <- calculate_surrounding(s.dist3, scale, "A")
-scale$SUVI4 <- calculate_surrounding(s.dist4, scale, "A")
-scale$SUVI5 <- calculate_surrounding(s.dist5, scale, "A")
+shp <- st_read("../data/30_final.shp")
+data <- edit_shp2(shp)
+spatial <- data
 ```
 
 ```{r, include=FALSE}
